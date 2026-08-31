@@ -11,7 +11,7 @@ local Running = false
 local IsShooting = false
 local IsMinimized = false
 local ShotStartTime = 0
-local TargetDelay = 0.68 -- Hardcoded 0.68 seconds barrier guard
+local TargetDelay = 0.68 -- Default starting time preference
 local ScanConnection = nil
 
 -- Clean UI Setup
@@ -25,8 +25,8 @@ ScreenGui.Parent = PlayerGui
 -- Main Window Container
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 620, 0, 340)
-MainFrame.Position = UDim2.new(0.5, -310, 0.5, -170)
+MainFrame.Size = UDim2.new(0, 620, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -310, 0.5, -200)
 MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 MainFrame.BackgroundTransparency = 0.02
 MainFrame.BorderSizePixel = 0
@@ -75,7 +75,7 @@ HeaderDivider.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 HeaderDivider.BorderSizePixel = 0
 HeaderDivider.Parent = HeaderBar
 
--- Title Text (Changed to Countx)
+-- Title Text
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(0, 150, 0, 20)
 TitleLabel.Position = UDim2.new(0, 20, 0, 22)
@@ -172,10 +172,10 @@ SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
 SectionTitle.Parent = ContentArea
 
 local SectionDesc = Instance.new("TextLabel")
-SectionDesc.Size = UDim2.new(1, -40, 0, 36)
+SectionDesc.Size = UDim2.new(1, -40, 0, 30)
 SectionDesc.Position = UDim2.new(0, 20, 0, 32)
 SectionDesc.BackgroundTransparency = 1
-SectionDesc.Text = "0.68s Barrier Guard: Automatically cuts and releases your shot at exactly 0.68 seconds."
+SectionDesc.Text = "Automatically cuts and releases your shot at your specified time preference."
 SectionDesc.TextColor3 = Color3.fromRGB(140, 140, 140)
 SectionDesc.TextSize = 10
 SectionDesc.Font = Enum.Font.Gotham
@@ -183,10 +183,62 @@ SectionDesc.TextXAlignment = Enum.TextXAlignment.Left
 SectionDesc.TextWrapped = true
 SectionDesc.Parent = ContentArea
 
+-- TIME PREFERENCE BAR (NEW)
+local TimeCard = Instance.new("Frame")
+TimeCard.Size = UDim2.new(1, -40, 0, 42)
+TimeCard.Position = UDim2.new(0, 20, 0, 68)
+TimeCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+TimeCard.BorderSizePixel = 0
+TimeCard.Parent = ContentArea
+
+local TimeCardCorner = Instance.new("UICorner")
+TimeCardCorner.CornerRadius = UDim.new(0, 8)
+TimeCardCorner.Parent = TimeCard
+
+local TimeCardStroke = Instance.new("UIStroke")
+TimeCardStroke.Color = Color3.fromRGB(30, 30, 30)
+TimeCardStroke.Thickness = 1
+TimeCardStroke.Parent = TimeCard
+
+local TimeCardLabel = Instance.new("TextLabel")
+TimeCardLabel.Size = UDim2.new(1, -100, 1, 0)
+TimeCardLabel.Position = UDim2.new(0, 16, 0, 0)
+TimeCardLabel.BackgroundTransparency = 1
+TimeCardLabel.Text = "Target Time (Seconds)"
+TimeCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+TimeCardLabel.TextSize = 12
+TimeCardLabel.Font = Enum.Font.GothamMedium
+TimeCardLabel.TextXAlignment = Enum.TextXAlignment.Left
+TimeCardLabel.Parent = TimeCard
+
+local TimeTextBox = Instance.new("TextBox")
+TimeTextBox.Size = UDim2.new(0, 70, 0, 26)
+TimeTextBox.Position = UDim2.new(1, -12, 0.5, 0)
+TimeTextBox.AnchorPoint = Vector2.new(1, 0.5)
+TimeTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+TimeTextBox.BorderSizePixel = 0
+TimeTextBox.Text = "0.68"
+TimeTextBox.PlaceholderText = "0.68"
+TimeTextBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
+TimeTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TimeTextBox.TextSize = 12
+TimeTextBox.Font = Enum.Font.GothamBold
+TimeTextBox.ClearTextOnFocus = false
+TimeTextBox.Parent = TimeCard
+
+local TimeBoxCorner = Instance.new("UICorner")
+TimeBoxCorner.CornerRadius = UDim.new(0, 6)
+TimeBoxCorner.Parent = TimeTextBox
+
+local TimeBoxStroke = Instance.new("UIStroke")
+TimeBoxStroke.Color = Color3.fromRGB(50, 50, 50)
+TimeBoxStroke.Thickness = 1
+TimeBoxStroke.Parent = TimeTextBox
+
 -- Toggle Card Container
 local ToggleCard = Instance.new("Frame")
 ToggleCard.Size = UDim2.new(1, -40, 0, 48)
-ToggleCard.Position = UDim2.new(0, 20, 0, 72)
+ToggleCard.Position = UDim2.new(0, 20, 0, 116)
 ToggleCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 ToggleCard.BorderSizePixel = 0
 ToggleCard.Parent = ContentArea
@@ -246,7 +298,7 @@ DotCorner.Parent = SwitchDot
 -- Panic Button Inside Hub
 local PanicButton = Instance.new("TextButton")
 PanicButton.Size = UDim2.new(1, -40, 0, 36)
-PanicButton.Position = UDim2.new(0, 20, 0, 136)
+PanicButton.Position = UDim2.new(0, 20, 0, 178)
 PanicButton.BackgroundColor3 = Color3.fromRGB(30, 10, 10)
 PanicButton.BorderSizePixel = 0
 PanicButton.AutoButtonColor = false
@@ -268,9 +320,9 @@ PanicStroke.Parent = PanicButton
 -- Status feedback label under Panic Button
 local StatusFeedback = Instance.new("TextLabel")
 StatusFeedback.Size = UDim2.new(1, -40, 0, 20)
-StatusFeedback.Position = UDim2.new(0, 20, 0, 180)
+StatusFeedback.Position = UDim2.new(0, 20, 0, 222)
 StatusFeedback.BackgroundTransparency = 1
-StatusFeedback.Text = "Status: Ready (0.68s Barrier Guard Ready)"
+StatusFeedback.Text = "Status: Ready (Custom Timer Ready)"
 StatusFeedback.TextColor3 = Color3.fromRGB(110, 110, 110)
 StatusFeedback.TextSize = 11
 StatusFeedback.Font = Enum.Font.GothamMedium
@@ -289,7 +341,18 @@ local function updateStatusText(text, color)
 	StatusFeedback.TextColor3 = color or Color3.fromRGB(110, 110, 110)
 end
 
--- Timer-based 0.68s Guard Scanner (Heartbeat)
+-- Update TargetDelay from TextBox Input
+TimeTextBox.FocusLost:Connect(function()
+	local val = tonumber(TimeTextBox.Text)
+	if val and val > 0 then
+		TargetDelay = val
+		updateStatusText("Status: Timer set to " .. val .. "s", Color3.fromRGB(150, 220, 255))
+	else
+		TimeTextBox.Text = tostring(TargetDelay)
+	end
+end)
+
+-- Timer-based Scanner (Heartbeat) using Custom TargetDelay
 local function startScanning()
 	if ScanConnection then ScanConnection:Disconnect() end
 	ScanConnection = RunService.Heartbeat:Connect(function()
@@ -302,10 +365,10 @@ local function startScanning()
 					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 				end)
 				IsShooting = false
-				updateStatusText("Status: 0.68s Barrier Hit ✓", Color3.fromRGB(150, 255, 150))
+				updateStatusText("Status: " .. TargetDelay .. "s Barrier Hit ✓", Color3.fromRGB(150, 255, 150))
 				task.wait(0.3)
 				if Running then
-					updateStatusText("Status: Active (0.68s Barrier Guard)", Color3.fromRGB(200, 200, 200))
+					updateStatusText("Status: Active (" .. TargetDelay .. "s Timer Guard)", Color3.fromRGB(200, 200, 200))
 				end
 			end
 		end
@@ -325,7 +388,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if input.KeyCode == Enum.KeyCode.E then
 		IsShooting = true
 		ShotStartTime = tick()
-		updateStatusText("Status: Guard Armed (Waiting for 0.68s)...", Color3.fromRGB(220, 220, 220))
+		updateStatusText("Status: Guard Armed (Waiting for " .. TargetDelay .. "s)...", Color3.fromRGB(220, 220, 220))
 	end
 end)
 
@@ -336,7 +399,7 @@ UserInputService.InputEnded:Connect(function(input)
 			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 		end)
 		if Running then
-			updateStatusText("Status: Active (0.68s Barrier Guard)", Color3.fromRGB(200, 200, 200))
+			updateStatusText("Status: Active (" .. TargetDelay .. "s Timer Guard)", Color3.fromRGB(200, 200, 200))
 		end
 	end
 end)
@@ -348,7 +411,7 @@ local function setToggleState(on)
 	if on then
 		tween(SwitchButton, {BackgroundColor3 = Color3.fromRGB(255, 255, 255)}, 0.2)
 		tween(SwitchDot, {Size = UDim2.new(0, 16, 0, 16)}, 0.2)
-		updateStatusText("Status: Active (0.68s Barrier Guard)", Color3.fromRGB(200, 200, 200))
+		updateStatusText("Status: Active (" .. TargetDelay .. "s Timer Guard)", Color3.fromRGB(200, 200, 200))
 		startScanning()
 	else
 		tween(SwitchButton, {BackgroundColor3 = Color3.fromRGB(15, 15, 15)}, 0.2)
@@ -384,7 +447,7 @@ MinBtn.MouseButton1Click:Connect(function()
 		ContentArea.Visible = false
 	else
 		MinBtn.Text = "—"
-		tween(MainFrame, {Size = UDim2.new(0, 620, 0, 340)}, 0.25)
+		tween(MainFrame, {Size = UDim2.new(0, 620, 0, 400)}, 0.25)
 		Sidebar.Visible = true
 		ContentArea.Visible = true
 	end
