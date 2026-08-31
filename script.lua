@@ -75,12 +75,12 @@ HeaderDivider.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 HeaderDivider.BorderSizePixel = 0
 HeaderDivider.Parent = HeaderBar
 
--- Title Text
+-- Title Text (Changed to Countx)
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(0, 150, 0, 20)
 TitleLabel.Position = UDim2.new(0, 20, 0, 22)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Control Panel"
+TitleLabel.Text = "Countx"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 16
 TitleLabel.Font = Enum.Font.GothamBold
