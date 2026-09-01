@@ -20,6 +20,10 @@ local ShotHistory = {}
 local AutoTimeMinLimit = 0.30
 local AutoTimeMaxLimit = 0.80
 
+-- Movement State
+local TpWalkEnabled = false
+local TpWalkSpeed = 16
+
 -- Detailed Component Color States
 local ComponentColors = {
     Header = Color3.fromRGB(5, 5, 5),
@@ -276,7 +280,8 @@ end
 
 local TabShooting = createSidebarTab("Shooting", "Shooting", 10, true)
 local TabOverlay = createSidebarTab("Overlay", "Overlay", 54, false)
-local TabTheme = createSidebarTab("Theme", "Theme", 98, false)
+local TabMovement = createSidebarTab("Movement", "Movement", 98, false)
+local TabTheme = createSidebarTab("Theme", "Theme", 142, false)
 
 -- Content Panels Container
 local ContentArea = Instance.new("Frame")
@@ -305,6 +310,15 @@ PanelOverlay.ScrollBarThickness = 2
 PanelOverlay.Visible = false
 PanelOverlay.Parent = ContentArea
 
+local PanelMovement = Instance.new("ScrollingFrame")
+PanelMovement.Size = UDim2.new(1, 0, 1, 0)
+PanelMovement.BackgroundTransparency = 1
+PanelMovement.BorderSizePixel = 0
+PanelMovement.CanvasSize = UDim2.new(0, 0, 0, 180)
+PanelMovement.ScrollBarThickness = 2
+PanelMovement.Visible = false
+PanelMovement.Parent = ContentArea
+
 local PanelTheme = Instance.new("ScrollingFrame")
 PanelTheme.Size = UDim2.new(1, 0, 1, 0)
 PanelTheme.BackgroundTransparency = 1
@@ -318,6 +332,7 @@ PanelTheme.Parent = ContentArea
 local function switchTab(selectedName)
     PanelShooting.Visible = (selectedName == "Shooting")
     PanelOverlay.Visible = (selectedName == "Overlay")
+    PanelMovement.Visible = (selectedName == "Movement")
     PanelTheme.Visible = (selectedName == "Theme")
 
     for _, tData in ipairs(allTabs) do
@@ -331,6 +346,7 @@ end
 
 TabShooting.Button.MouseButton1Click:Connect(function() switchTab("Shooting") end)
 TabOverlay.Button.MouseButton1Click:Connect(function() switchTab("Overlay") end)
+TabMovement.Button.MouseButton1Click:Connect(function() switchTab("Movement") end)
 TabTheme.Button.MouseButton1Click:Connect(function() switchTab("Theme") end)
 
 -- SHOOTING PANEL CONTENT
@@ -596,6 +612,126 @@ LockSwitchCore.BorderSizePixel = 0
 LockSwitchCore.Parent = LockSwitchButton
 local LockCoreCorner = Instance.new("UICorner") LockCoreCorner.CornerRadius = UDim.new(1, 0) LockCoreCorner.Parent = LockSwitchCore
 local LockCoreStroke = Instance.new("UIStroke") LockCoreStroke.Color = Color3.fromRGB(200, 140, 255) LockCoreStroke.Thickness = 1 LockCoreStroke.Transparency = 0 LockCoreStroke.Parent = LockSwitchButton
+
+--- MOVEMENT PANEL CONTENT ---
+local MovementSecTitle = Instance.new("TextLabel")
+MovementSecTitle.Size = UDim2.new(0, 180, 0, 16)
+MovementSecTitle.Position = UDim2.new(0, 14, 0, 12)
+MovementSecTitle.BackgroundTransparency = 1
+MovementSecTitle.Text = "MOVEMENT OPTIONS"
+MovementSecTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+MovementSecTitle.TextSize = 10
+MovementSecTitle.Font = Enum.Font.GothamBold
+MovementSecTitle.TextXAlignment = Enum.TextXAlignment.Left
+MovementSecTitle.Parent = PanelMovement
+
+-- TP Walk Toggle Card
+local TpWalkCard = Instance.new("Frame")
+TpWalkCard.Size = UDim2.new(1, -28, 0, 38)
+TpWalkCard.Position = UDim2.new(0, 14, 0, 32)
+TpWalkCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+TpWalkCard.BorderSizePixel = 0
+TpWalkCard.Parent = PanelMovement
+local TpWalkCardCorner = Instance.new("UICorner") TpWalkCardCorner.CornerRadius = UDim.new(0, 6) TpWalkCardCorner.Parent = TpWalkCard
+local TpWalkCardStroke = Instance.new("UIStroke") TpWalkCardStroke.Color = Color3.fromRGB(30, 30, 30) TpWalkCardStroke.Thickness = 1 TpWalkCardStroke.Parent = TpWalkCard
+
+local TpWalkCardLabel = Instance.new("TextLabel")
+TpWalkCardLabel.Size = UDim2.new(1, -60, 1, 0)
+TpWalkCardLabel.Position = UDim2.new(0, 12, 0, 0)
+TpWalkCardLabel.BackgroundTransparency = 1
+TpWalkCardLabel.Text = "TP Walk"
+TpWalkCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+TpWalkCardLabel.TextSize = 11
+TpWalkCardLabel.Font = Enum.Font.GothamMedium
+TpWalkCardLabel.TextXAlignment = Enum.TextXAlignment.Left
+TpWalkCardLabel.Parent = TpWalkCard
+
+local TpWalkSwitchButton = Instance.new("TextButton")
+TpWalkSwitchButton.Size = UDim2.new(0, 24, 0, 24)
+TpWalkSwitchButton.Position = UDim2.new(1, -14, 0.5, 0)
+TpWalkSwitchButton.AnchorPoint = Vector2.new(1, 0.5)
+TpWalkSwitchButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+TpWalkSwitchButton.BorderSizePixel = 0
+TpWalkSwitchButton.Text = ""
+TpWalkSwitchButton.AutoButtonColor = false
+TpWalkSwitchButton.Parent = TpWalkCard
+local TpWalkSwitchCorner = Instance.new("UICorner") TpWalkSwitchCorner.CornerRadius = UDim.new(1, 0) TpWalkSwitchCorner.Parent = TpWalkSwitchButton
+local TpWalkSwitchStroke = Instance.new("UIStroke") TpWalkSwitchStroke.Color = Color3.fromRGB(80, 80, 80) TpWalkSwitchStroke.Thickness = 1.5 TpWalkSwitchStroke.Parent = TpWalkSwitchButton
+
+local TpWalkSwitchCore = Instance.new("Frame")
+TpWalkSwitchCore.Size = UDim2.new(0, 0, 0, 0)
+TpWalkSwitchCore.AnchorPoint = Vector2.new(0.5, 0.5)
+TpWalkSwitchCore.Position = UDim2.new(0.5, 0, 0.5, 0)
+TpWalkSwitchCore.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TpWalkSwitchCore.BorderSizePixel = 0
+TpWalkSwitchCore.Parent = TpWalkSwitchButton
+local TpWalkCoreCorner = Instance.new("UICorner") TpWalkCoreCorner.CornerRadius = UDim.new(1, 0) TpWalkCoreCorner.Parent = TpWalkSwitchCore
+local TpWalkCoreStroke = Instance.new("UIStroke") TpWalkCoreStroke.Color = Color3.fromRGB(200, 140, 255) TpWalkCoreStroke.Thickness = 1 TpWalkCoreStroke.Transparency = 1 TpWalkCoreStroke.Parent = TpWalkSwitchCore
+
+-- Speed Scale (TextBox) Card
+local SpeedCard = Instance.new("Frame")
+SpeedCard.Size = UDim2.new(1, -28, 0, 36)
+SpeedCard.Position = UDim2.new(0, 14, 0, 78)
+SpeedCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+SpeedCard.BorderSizePixel = 0
+SpeedCard.Parent = PanelMovement
+local SpeedCardCorner = Instance.new("UICorner") SpeedCardCorner.CornerRadius = UDim.new(0, 6) SpeedCardCorner.Parent = SpeedCard
+local SpeedCardStroke = Instance.new("UIStroke") SpeedCardStroke.Color = Color3.fromRGB(30, 30, 30) SpeedCardStroke.Thickness = 1 SpeedCardStroke.Parent = SpeedCard
+
+local SpeedCardLabel = Instance.new("TextLabel")
+SpeedCardLabel.Size = UDim2.new(1, -80, 1, 0)
+SpeedCardLabel.Position = UDim2.new(0, 12, 0, 0)
+SpeedCardLabel.BackgroundTransparency = 1
+SpeedCardLabel.Text = "TP Walk Speed Scale"
+SpeedCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+SpeedCardLabel.TextSize = 11
+SpeedCardLabel.Font = Enum.Font.GothamMedium
+SpeedCardLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpeedCardLabel.Parent = SpeedCard
+
+local SpeedTextBox = Instance.new("TextBox")
+SpeedTextBox.Size = UDim2.new(0, 60, 0, 22)
+SpeedTextBox.Position = UDim2.new(1, -10, 0.5, 0)
+SpeedTextBox.AnchorPoint = Vector2.new(1, 0.5)
+SpeedTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+SpeedTextBox.BorderSizePixel = 0
+SpeedTextBox.Text = "16"
+SpeedTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedTextBox.TextSize = 11
+SpeedTextBox.Font = Enum.Font.GothamBold
+SpeedTextBox.ClearTextOnFocus = false
+SpeedTextBox.Parent = SpeedCard
+local SpeedBoxCorner = Instance.new("UICorner") SpeedBoxCorner.CornerRadius = UDim.new(0, 5) SpeedBoxCorner.Parent = SpeedTextBox
+local SpeedBoxStroke = Instance.new("UIStroke") SpeedBoxStroke.Color = Color3.fromRGB(50, 50, 50) SpeedBoxStroke.Thickness = 1 SpeedBoxStroke.Parent = SpeedTextBox
+
+SpeedTextBox.FocusLost:Connect(function()
+    local val = tonumber(SpeedTextBox.Text)
+    if val and val >= 0 then
+        TpWalkSpeed = val
+        SpeedTextBox.Text = tostring(TpWalkSpeed)
+    else
+        SpeedTextBox.Text = tostring(TpWalkSpeed)
+    end
+end)
+
+TpWalkSwitchButton.MouseButton1Click:Connect(function()
+    TpWalkEnabled = not TpWalkEnabled
+    applyBlackHoleToggleState(TpWalkSwitchButton, TpWalkSwitchStroke, TpWalkSwitchCore, TpWalkCoreStroke, TpWalkEnabled)
+end)
+
+-- TP Walk Loop Logic
+RunService.Heartbeat:Connect(function(dt)
+    if not TpWalkEnabled then return end
+    pcall(function()
+        local character = Player.Character
+        if not character then return end
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoidRootPart and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+            humanoidRootPart.CFrame = humanoidRootPart.CFrame + (humanoid.MoveDirection * TpWalkSpeed * dt)
+        end
+    end)
+end)
 
 --- COLOR CUSTOMIZER PANEL ---
 local ThemeSecTitle = Instance.new("TextLabel")
@@ -1069,6 +1205,7 @@ end)
 PanicButton.MouseButton1Click:Connect(function()
     Running = false
     AutoTimeEnabled = false
+    TpWalkEnabled = false
     stopScanning()
     ScreenGui:Destroy()
 end)
@@ -1076,6 +1213,7 @@ end)
 CloseBtn.MouseButton1Click:Connect(function()
     Running = false
     AutoTimeEnabled = false
+    TpWalkEnabled = false
     stopScanning()
     ScreenGui:Destroy()
 end)
