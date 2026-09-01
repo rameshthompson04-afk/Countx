@@ -12,14 +12,13 @@ local IsShooting = false
 local IsMinimized = false
 local ShotStartTime = 0
 local TargetDelay = 0.68 
-local PredictionOffset = 0.03 
-local StepbackOffset = 0.15 
 local ScanConnection = nil
 
--- Speed Hack State
-local SpeedEnabled = false
-local WalkSpeedValue = 24 
-local SpeedConnection = nil
+-- Auto Time State
+local AutoTimeEnabled = false
+local ShotHistory = {}
+local AutoTimeMinLimit = 0.30
+local AutoTimeMaxLimit = 0.80
 
 -- Detailed Component Color States
 local ComponentColors = {
@@ -41,7 +40,7 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PlayerGui
 
--- Main Window Container (Tinier size: 520x350)
+-- Main Window Container (Size: 520x350)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 520, 0, 350)
@@ -78,7 +77,7 @@ Shadow.SliceCenter = Rect.new(10, 10, 118, 118)
 Shadow.ZIndex = -1
 Shadow.Parent = MainFrame
 
--- Top Navigation / Header Bar (Tinier height: 52px)
+-- Top Navigation / Header Bar (Height: 52px)
 local HeaderBar = Instance.new("Frame")
 HeaderBar.Name = "HeaderBar"
 HeaderBar.Size = UDim2.new(1, 0, 0, 52)
@@ -94,7 +93,7 @@ HeaderDivider.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 HeaderDivider.BorderSizePixel = 0
 HeaderDivider.Parent = HeaderBar
 
--- Helper function to build ultra-realistic textured moon layouts with complex crater shading
+-- Helper function to build textured moon layout
 local function buildTexturedMoon(parent)
     local container = Instance.new("Frame")
     container.Name = "MoonContainer"
@@ -104,7 +103,6 @@ local function buildTexturedMoon(parent)
     container.ZIndex = 5
     container.Parent = parent
 
-    -- Outer Multi-layered Atmospheric Glow
     local outerGlow = Instance.new("Frame")
     outerGlow.Size = UDim2.new(0, 28, 0, 28)
     outerGlow.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -116,7 +114,6 @@ local function buildTexturedMoon(parent)
     outerGlow.Parent = container
     local ogCorner = Instance.new("UICorner") ogCorner.CornerRadius = UDim.new(1, 0) ogCorner.Parent = outerGlow
 
-    -- Moon Body Frame
     local fullMoon = Instance.new("Frame")
     fullMoon.Size = UDim2.new(0, 24, 0, 24)
     fullMoon.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -127,16 +124,9 @@ local function buildTexturedMoon(parent)
     fullMoon.ZIndex = 5
     fullMoon.Parent = container
 
-    local moonCorner = Instance.new("UICorner")
-    moonCorner.CornerRadius = UDim.new(1, 0)
-    moonCorner.Parent = fullMoon
+    local moonCorner = Instance.new("UICorner") moonCorner.CornerRadius = UDim.new(1, 0) moonCorner.Parent = fullMoon
+    local moonStroke = Instance.new("UIStroke") moonStroke.Color = Color3.fromRGB(180, 205, 245) moonStroke.Thickness = 1.2 moonStroke.Parent = fullMoon
 
-    local moonStroke = Instance.new("UIStroke")
-    moonStroke.Color = Color3.fromRGB(180, 205, 245)
-    moonStroke.Thickness = 1.2
-    moonStroke.Parent = fullMoon
-
-    -- Complex High-Detail Realistic Lunar Craters & Maria 
     local function addCrater(px, py, pw, ph, col, transp)
         local c = Instance.new("Frame")
         c.Size = UDim2.new(0, pw, 0, ph)
@@ -149,49 +139,30 @@ local function buildTexturedMoon(parent)
         local cc = Instance.new("UICorner") cc.CornerRadius = UDim.new(1, 0) cc.Parent = c
     end
 
-    -- Deep Mare Basins (Darker patches)
     addCrater(3, 3, 8, 7, Color3.fromRGB(135, 150, 175), 0.2)
     addCrater(11, 7, 9, 8, Color3.fromRGB(140, 155, 180), 0.25)
     addCrater(6, 12, 10, 7, Color3.fromRGB(130, 145, 170), 0.3)
-    
-    -- Highlight Rim Impacts / Bright Craters (Tycho / Copernicus style specs)
     addCrater(13, 3, 4, 4, Color3.fromRGB(255, 255, 255), 0.1)
     addCrater(2, 14, 5, 4, Color3.fromRGB(235, 245, 255), 0.15)
     addCrater(9, 2, 3, 3, Color3.fromRGB(240, 248, 255), 0.2)
     addCrater(16, 13, 4, 4, Color3.fromRGB(225, 238, 255), 0.25)
     addCrater(5, 7, 3, 3, Color3.fromRGB(170, 185, 210), 0.2)
 
-    -- Dynamic Realistic Pulsing Glow Loop
     task.spawn(function()
         while true do
-            TweenService:Create(moonStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Transparency = 0.5,
-                Thickness = 2.5
-            }):Play()
-            TweenService:Create(outerGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Size = UDim2.new(0, 34, 0, 34),
-                BackgroundTransparency = 0.92
-            }):Play()
+            TweenService:Create(moonStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.5, Thickness = 2.5}):Play()
+            TweenService:Create(outerGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 34, 0, 34), BackgroundTransparency = 0.92}):Play()
             task.wait(1.4)
-            TweenService:Create(moonStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Transparency = 0.2,
-                Thickness = 1.0
-            }):Play()
-            TweenService:Create(outerGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-                Size = UDim2.new(0, 26, 0, 26),
-                BackgroundTransparency = 0.78
-            }):Play()
+            TweenService:Create(moonStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.2, Thickness = 1.0}):Play()
+            TweenService:Create(outerGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 26, 0, 26), BackgroundTransparency = 0.78}):Play()
             task.wait(1.4)
         end
     end)
-
     return container
 end
 
--- Header Moon Visualizer
 buildTexturedMoon(HeaderBar)
 
--- Title Text
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(0, 130, 0, 18)
 TitleLabel.Position = UDim2.new(0, 48, 0, 17)
@@ -203,7 +174,6 @@ TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = HeaderBar
 
--- Minimize and Close Controls
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 20, 0, 20)
 CloseBtn.Position = UDim2.new(1, -12, 0, 16)
@@ -226,7 +196,7 @@ MinBtn.TextSize = 11
 MinBtn.Font = Enum.Font.GothamBold
 MinBtn.Parent = HeaderBar
 
--- Left Sidebar Navigation (Width: 155px)
+-- Left Sidebar Navigation
 local Sidebar = Instance.new("ScrollingFrame")
 Sidebar.Size = UDim2.new(0, 155, 1, -52)
 Sidebar.Position = UDim2.new(0, 0, 0, 52)
@@ -245,7 +215,6 @@ SidebarDivider.Parent = Sidebar
 
 local allTabs = {}
 
--- Helper to build White Ring Sidebar Icons with a Black Hole Inside
 local function buildSidebarBlackHole(parent)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(0, 20, 0, 20)
@@ -284,14 +253,8 @@ local function createSidebarTab(name, text, yPos, isActive)
     tab.AutoButtonColor = false
     tab.Parent = Sidebar
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = tab
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = isActive and ComponentColors.Accent or Color3.fromRGB(40, 30, 55)
-    stroke.Thickness = 1
-    stroke.Parent = tab
+    local corner = Instance.new("UICorner") corner.CornerRadius = UDim.new(0, 8) corner.Parent = tab
+    local stroke = Instance.new("UIStroke") stroke.Color = isActive and ComponentColors.Accent or Color3.fromRGB(40, 30, 55) stroke.Thickness = 1 stroke.Parent = tab
 
     buildSidebarBlackHole(tab)
 
@@ -308,15 +271,12 @@ local function createSidebarTab(name, text, yPos, isActive)
 
     local tabData = {Button = tab, Stroke = stroke, Label = lbl, Active = isActive}
     table.insert(allTabs, tabData)
-
     return tabData
 end
 
 local TabShooting = createSidebarTab("Shooting", "Shooting", 10, true)
-local TabMovement = createSidebarTab("Movement", "Movement", 54, false)
-local TabOverlay = createSidebarTab("Overlay", "Overlay", 98, false)
-local TabTheme = createSidebarTab("Theme", "Theme", 142, false)
-local TabESP = createSidebarTab("ESP", "ESP", 186, false)
+local TabOverlay = createSidebarTab("Overlay", "Overlay", 54, false)
+local TabTheme = createSidebarTab("Theme", "Theme", 98, false)
 
 -- Content Panels Container
 local ContentArea = Instance.new("Frame")
@@ -326,24 +286,15 @@ ContentArea.BackgroundTransparency = 1
 ContentArea.BorderSizePixel = 0
 ContentArea.Parent = MainFrame
 
--- Panels
+-- Panels Setup
 local PanelShooting = Instance.new("ScrollingFrame")
 PanelShooting.Size = UDim2.new(1, 0, 1, 0)
 PanelShooting.BackgroundTransparency = 1
 PanelShooting.BorderSizePixel = 0
-PanelShooting.CanvasSize = UDim2.new(0, 0, 0, 270)
+PanelShooting.CanvasSize = UDim2.new(0, 0, 0, 210)
 PanelShooting.ScrollBarThickness = 2
 PanelShooting.Visible = true
 PanelShooting.Parent = ContentArea
-
-local PanelMovement = Instance.new("ScrollingFrame")
-PanelMovement.Size = UDim2.new(1, 0, 1, 0)
-PanelMovement.BackgroundTransparency = 1
-PanelMovement.BorderSizePixel = 0
-PanelMovement.CanvasSize = UDim2.new(0, 0, 0, 180)
-PanelMovement.ScrollBarThickness = 2
-PanelMovement.Visible = false
-PanelMovement.Parent = ContentArea
 
 local PanelOverlay = Instance.new("ScrollingFrame")
 PanelOverlay.Size = UDim2.new(1, 0, 1, 0)
@@ -363,22 +314,11 @@ PanelTheme.ScrollBarThickness = 2
 PanelTheme.Visible = false
 PanelTheme.Parent = ContentArea
 
-local PanelESP = Instance.new("ScrollingFrame")
-PanelESP.Size = UDim2.new(1, 0, 1, 0)
-PanelESP.BackgroundTransparency = 1
-PanelESP.BorderSizePixel = 0
-PanelESP.CanvasSize = UDim2.new(0, 0, 0, 180)
-PanelESP.ScrollBarThickness = 2
-PanelESP.Visible = false
-PanelESP.Parent = ContentArea
-
--- Tab Switching Function
+-- Tab Switching Logic
 local function switchTab(selectedName)
     PanelShooting.Visible = (selectedName == "Shooting")
-    PanelMovement.Visible = (selectedName == "Movement")
     PanelOverlay.Visible = (selectedName == "Overlay")
     PanelTheme.Visible = (selectedName == "Theme")
-    PanelESP.Visible = (selectedName == "ESP")
 
     for _, tData in ipairs(allTabs) do
         local isActive = (tData.Button.Name == selectedName .. "Tab")
@@ -390,17 +330,15 @@ local function switchTab(selectedName)
 end
 
 TabShooting.Button.MouseButton1Click:Connect(function() switchTab("Shooting") end)
-TabMovement.Button.MouseButton1Click:Connect(function() switchTab("Movement") end)
 TabOverlay.Button.MouseButton1Click:Connect(function() switchTab("Overlay") end)
 TabTheme.Button.MouseButton1Click:Connect(function() switchTab("Theme") end)
-TabESP.Button.MouseButton1Click:Connect(function() switchTab("ESP") end)
 
 -- SHOOTING PANEL CONTENT
 local SectionTitle = Instance.new("TextLabel")
 SectionTitle.Size = UDim2.new(0, 180, 0, 16)
 SectionTitle.Position = UDim2.new(0, 14, 0, 12)
 SectionTitle.BackgroundTransparency = 1
-SectionTitle.Text = "AUTO GREEN"
+SectionTitle.Text = "AUTO GREEN & TIMING"
 SectionTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
 SectionTitle.TextSize = 10
 SectionTitle.Font = Enum.Font.GothamBold
@@ -442,77 +380,7 @@ TimeTextBox.Parent = TimeCard
 local TimeBoxCorner = Instance.new("UICorner") TimeBoxCorner.CornerRadius = UDim.new(0, 5) TimeBoxCorner.Parent = TimeTextBox
 local TimeBoxStroke = Instance.new("UIStroke") TimeBoxStroke.Color = Color3.fromRGB(50, 50, 50) TimeBoxStroke.Thickness = 1 TimeBoxStroke.Parent = TimeTextBox
 
-local PredCard = Instance.new("Frame")
-PredCard.Size = UDim2.new(1, -28, 0, 36)
-PredCard.Position = UDim2.new(0, 14, 0, 72)
-PredCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-PredCard.BorderSizePixel = 0
-PredCard.Parent = PanelShooting
-local PredCardCorner = Instance.new("UICorner") PredCardCorner.CornerRadius = UDim.new(0, 6) PredCardCorner.Parent = PredCard
-local PredCardStroke = Instance.new("UIStroke") PredCardStroke.Color = Color3.fromRGB(30, 30, 30) PredCardStroke.Thickness = 1 PredCardStroke.Parent = PredCard
-
-local PredCardLabel = Instance.new("TextLabel")
-PredCardLabel.Size = UDim2.new(1, -80, 1, 0)
-PredCardLabel.Position = UDim2.new(0, 12, 0, 0)
-PredCardLabel.BackgroundTransparency = 1
-PredCardLabel.Text = "Prediction / Lag Offset"
-PredCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-PredCardLabel.TextSize = 11
-PredCardLabel.Font = Enum.Font.GothamMedium
-PredCardLabel.TextXAlignment = Enum.TextXAlignment.Left
-PredCardLabel.Parent = PredCard
-
-local PredTextBox = Instance.new("TextBox")
-PredTextBox.Size = UDim2.new(0, 60, 0, 22)
-PredTextBox.Position = UDim2.new(1, -10, 0.5, 0)
-PredTextBox.AnchorPoint = Vector2.new(1, 0.5)
-PredTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-PredTextBox.BorderSizePixel = 0
-PredTextBox.Text = "0.03"
-PredTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-PredTextBox.TextSize = 11
-PredTextBox.Font = Enum.Font.GothamBold
-PredTextBox.ClearTextOnFocus = false
-PredTextBox.Parent = PredCard
-local PredBoxCorner = Instance.new("UICorner") PredBoxCorner.CornerRadius = UDim.new(0, 5) PredBoxCorner.Parent = PredTextBox
-local PredBoxStroke = Instance.new("UIStroke") PredBoxStroke.Color = Color3.fromRGB(50, 50, 50) PredBoxStroke.Thickness = 1 PredBoxStroke.Parent = PredTextBox
-
-local StepbackCard = Instance.new("Frame")
-StepbackCard.Size = UDim2.new(1, -28, 0, 36)
-StepbackCard.Position = UDim2.new(0, 14, 0, 112)
-StepbackCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-StepbackCard.BorderSizePixel = 0
-StepbackCard.Parent = PanelShooting
-local StepbackCardCorner = Instance.new("UICorner") StepbackCardCorner.CornerRadius = UDim.new(0, 6) StepbackCardCorner.Parent = StepbackCard
-local StepbackCardStroke = Instance.new("UIStroke") StepbackCardStroke.Color = Color3.fromRGB(30, 30, 30) StepbackCardStroke.Thickness = 1 StepbackCardStroke.Parent = StepbackCard
-
-local StepbackCardLabel = Instance.new("TextLabel")
-StepbackCardLabel.Size = UDim2.new(1, -80, 1, 0)
-StepbackCardLabel.Position = UDim2.new(0, 12, 0, 0)
-StepbackCardLabel.BackgroundTransparency = 1
-StepbackCardLabel.Text = "Stepback Offset"
-StepbackCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-StepbackCardLabel.TextSize = 11
-StepbackCardLabel.Font = Enum.Font.GothamMedium
-StepbackCardLabel.TextXAlignment = Enum.TextXAlignment.Left
-StepbackCardLabel.Parent = StepbackCard
-
-local StepbackTextBox = Instance.new("TextBox")
-StepbackTextBox.Size = UDim2.new(0, 60, 0, 22)
-StepbackTextBox.Position = UDim2.new(1, -10, 0.5, 0)
-StepbackTextBox.AnchorPoint = Vector2.new(1, 0.5)
-StepbackTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-StepbackTextBox.BorderSizePixel = 0
-StepbackTextBox.Text = "0.15"
-StepbackTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-StepbackTextBox.TextSize = 11
-StepbackTextBox.Font = Enum.Font.GothamBold
-StepbackTextBox.ClearTextOnFocus = false
-StepbackTextBox.Parent = StepbackCard
-local StepbackBoxCorner = Instance.new("UICorner") StepbackBoxCorner.CornerRadius = UDim.new(0, 5) StepbackBoxCorner.Parent = StepbackTextBox
-local StepbackBoxStroke = Instance.new("UIStroke") StepbackBoxStroke.Color = Color3.fromRGB(50, 50, 50) StepbackBoxStroke.Thickness = 1 StepbackBoxStroke.Parent = StepbackTextBox
-
--- BLACK HOLE TOGGLE HELPER (Transforms into a glowing Purple Black Hole when enabled)
+-- TOGGLE HELPERS
 local function tween(obj, props, time, style, dir)
     local tw = TweenService:Create(obj, TweenInfo.new(time or 0.25, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props)
     tw:Play()
@@ -526,7 +394,6 @@ local function applyBlackHoleToggleState(switchBtn, ringStroke, coreFrame, coreS
         tween(coreFrame, {Size = UDim2.new(0, 0, 0, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255)}, 0.2)
         tween(coreStroke, {Transparency = 1}, 0.2)
     else
-        -- Active Purple Black Hole State
         tween(switchBtn, {BackgroundColor3 = Color3.fromRGB(10, 8, 15)}, 0.2)
         tween(ringStroke, {Color = Color3.fromRGB(180, 110, 255), Thickness = 2.2}, 0.2)
         tween(coreFrame, {Size = UDim2.new(0, 12, 0, 12), BackgroundColor3 = Color3.fromRGB(0, 0, 0)}, 0.2)
@@ -534,9 +401,53 @@ local function applyBlackHoleToggleState(switchBtn, ringStroke, coreFrame, coreS
     end
 end
 
+-- Auto Time Toggle Card
+local AutoTimeCard = Instance.new("Frame")
+AutoTimeCard.Size = UDim2.new(1, -28, 0, 38)
+AutoTimeCard.Position = UDim2.new(0, 14, 0, 74)
+AutoTimeCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+AutoTimeCard.BorderSizePixel = 0
+AutoTimeCard.Parent = PanelShooting
+local ATCCorner = Instance.new("UICorner") ATCCorner.CornerRadius = UDim.new(0, 6) ATCCorner.Parent = AutoTimeCard
+local ATCStroke = Instance.new("UIStroke") ATCStroke.Color = Color3.fromRGB(30, 30, 30) ATCStroke.Thickness = 1 ATCStroke.Parent = AutoTimeCard
+
+local AutoTimeCardLabel = Instance.new("TextLabel")
+AutoTimeCardLabel.Size = UDim2.new(1, -60, 1, 0)
+AutoTimeCardLabel.Position = UDim2.new(0, 12, 0, 0)
+AutoTimeCardLabel.BackgroundTransparency = 1
+AutoTimeCardLabel.Text = "Auto Time (Dynamic Sync)"
+AutoTimeCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+AutoTimeCardLabel.TextSize = 11
+AutoTimeCardLabel.Font = Enum.Font.GothamMedium
+AutoTimeCardLabel.TextXAlignment = Enum.TextXAlignment.Left
+AutoTimeCardLabel.Parent = AutoTimeCard
+
+local AutoTimeSwitchButton = Instance.new("TextButton")
+AutoTimeSwitchButton.Size = UDim2.new(0, 24, 0, 24)
+AutoTimeSwitchButton.Position = UDim2.new(1, -14, 0.5, 0)
+AutoTimeSwitchButton.AnchorPoint = Vector2.new(1, 0.5)
+AutoTimeSwitchButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+AutoTimeSwitchButton.BorderSizePixel = 0
+AutoTimeSwitchButton.Text = ""
+AutoTimeSwitchButton.AutoButtonColor = false
+AutoTimeSwitchButton.Parent = AutoTimeCard
+local ATSCorner = Instance.new("UICorner") ATSCorner.CornerRadius = UDim.new(1, 0) ATSCorner.Parent = AutoTimeSwitchButton
+local ATSStroke = Instance.new("UIStroke") ATSStroke.Color = Color3.fromRGB(80, 80, 80) ATSStroke.Thickness = 1.5 ATSStroke.Parent = AutoTimeSwitchButton
+
+local ATSCore = Instance.new("Frame")
+ATSCore.Size = UDim2.new(0, 0, 0, 0)
+ATSCore.AnchorPoint = Vector2.new(0.5, 0.5)
+ATSCore.Position = UDim2.new(0.5, 0, 0.5, 0)
+ATSCore.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ATSCore.BorderSizePixel = 0
+ATSCore.Parent = AutoTimeSwitchButton
+local ATSCoreCorner = Instance.new("UICorner") ATSCoreCorner.CornerRadius = UDim.new(1, 0) ATSCoreCorner.Parent = ATSCore
+local ATSCoreStroke = Instance.new("UIStroke") ATSCoreStroke.Color = Color3.fromRGB(200, 140, 255) ATSCoreStroke.Thickness = 1 ATSCoreStroke.Transparency = 1 ATSCoreStroke.Parent = ATSCore
+
+-- Main Auto Green Toggle Card
 local ToggleCard = Instance.new("Frame")
 ToggleCard.Size = UDim2.new(1, -28, 0, 38)
-ToggleCard.Position = UDim2.new(0, 14, 0, 152)
+ToggleCard.Position = UDim2.new(0, 14, 0, 118)
 ToggleCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 ToggleCard.BorderSizePixel = 0
 ToggleCard.Parent = PanelShooting
@@ -576,94 +487,19 @@ SwitchCore.Parent = SwitchButton
 local CoreCorner = Instance.new("UICorner") CoreCorner.CornerRadius = UDim.new(1, 0) CoreCorner.Parent = SwitchCore
 local CoreStroke = Instance.new("UIStroke") CoreStroke.Color = Color3.fromRGB(200, 140, 255) CoreStroke.Thickness = 1 CoreStroke.Transparency = 1 CoreStroke.Parent = SwitchCore
 
--- MOVEMENT PANEL CONTENT
-local MovementSecTitle = Instance.new("TextLabel")
-MovementSecTitle.Size = UDim2.new(0, 180, 0, 16)
-MovementSecTitle.Position = UDim2.new(0, 14, 0, 12)
-MovementSecTitle.BackgroundTransparency = 1
-MovementSecTitle.Text = "MOVEMENT & SPEED HACK"
-MovementSecTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
-MovementSecTitle.TextSize = 10
-MovementSecTitle.Font = Enum.Font.GothamBold
-MovementSecTitle.TextXAlignment = Enum.TextXAlignment.Left
-MovementSecTitle.Parent = PanelMovement
-
-local SpeedCard = Instance.new("Frame")
-SpeedCard.Size = UDim2.new(1, -28, 0, 36)
-SpeedCard.Position = UDim2.new(0, 14, 0, 32)
-SpeedCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-SpeedCard.BorderSizePixel = 0
-SpeedCard.Parent = PanelMovement
-local SpeedCardCorner = Instance.new("UICorner") SpeedCardCorner.CornerRadius = UDim.new(0, 6) SpeedCardCorner.Parent = SpeedCard
-local SpeedCardStroke = Instance.new("UIStroke") SpeedCardStroke.Color = Color3.fromRGB(30, 30, 30) SpeedCardStroke.Thickness = 1 SpeedCardStroke.Parent = SpeedCard
-
-local SpeedCardLabel = Instance.new("TextLabel")
-SpeedCardLabel.Size = UDim2.new(1, -80, 1, 0)
-SpeedCardLabel.Position = UDim2.new(0, 12, 0, 0)
-SpeedCardLabel.BackgroundTransparency = 1
-SpeedCardLabel.Text = "WalkSpeed Value"
-SpeedCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-SpeedCardLabel.TextSize = 11
-SpeedCardLabel.Font = Enum.Font.GothamMedium
-SpeedCardLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedCardLabel.Parent = SpeedCard
-
-local SpeedTextBox = Instance.new("TextBox")
-SpeedTextBox.Size = UDim2.new(0, 60, 0, 22)
-SpeedTextBox.Position = UDim2.new(1, -10, 0.5, 0)
-SpeedTextBox.AnchorPoint = Vector2.new(1, 0.5)
-SpeedTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-SpeedTextBox.BorderSizePixel = 0
-SpeedTextBox.Text = "24"
-SpeedTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedTextBox.TextSize = 11
-SpeedTextBox.Font = Enum.Font.GothamBold
-SpeedTextBox.ClearTextOnFocus = false
-SpeedTextBox.Parent = SpeedCard
-local SpeedBoxCorner = Instance.new("UICorner") SpeedBoxCorner.CornerRadius = UDim.new(0, 5) SpeedBoxCorner.Parent = SpeedTextBox
-local SpeedBoxStroke = Instance.new("UIStroke") SpeedBoxStroke.Color = Color3.fromRGB(50, 50, 50) SpeedBoxStroke.Thickness = 1 SpeedBoxStroke.Parent = SpeedTextBox
-
-local SpeedToggleCard = Instance.new("Frame")
-SpeedToggleCard.Size = UDim2.new(1, -28, 0, 38)
-SpeedToggleCard.Position = UDim2.new(0, 14, 0, 72)
-SpeedToggleCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-SpeedToggleCard.BorderSizePixel = 0
-SpeedToggleCard.Parent = PanelMovement
-local SpeedToggleCardCorner = Instance.new("UICorner") SpeedToggleCardCorner.CornerRadius = UDim.new(0, 6) SpeedToggleCardCorner.Parent = SpeedToggleCard
-local SpeedToggleCardStroke = Instance.new("UIStroke") SpeedToggleCardStroke.Color = Color3.fromRGB(30, 30, 30) SpeedToggleCardStroke.Thickness = 1 SpeedToggleCardStroke.Parent = SpeedToggleCard
-
-local SpeedToggleCardLabel = Instance.new("TextLabel")
-SpeedToggleCardLabel.Size = UDim2.new(1, -60, 1, 0)
-SpeedToggleCardLabel.Position = UDim2.new(0, 12, 0, 0)
-SpeedToggleCardLabel.BackgroundTransparency = 1
-SpeedToggleCardLabel.Text = "Enable Speed Hack (Float)"
-SpeedToggleCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-SpeedToggleCardLabel.TextSize = 11
-SpeedToggleCardLabel.Font = Enum.Font.GothamMedium
-SpeedToggleCardLabel.TextXAlignment = Enum.TextXAlignment.Left
-SpeedToggleCardLabel.Parent = SpeedToggleCard
-
-local SpeedSwitchButton = Instance.new("TextButton")
-SpeedSwitchButton.Size = UDim2.new(0, 24, 0, 24)
-SpeedSwitchButton.Position = UDim2.new(1, -14, 0.5, 0)
-SpeedSwitchButton.AnchorPoint = Vector2.new(1, 0.5)
-SpeedSwitchButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-SpeedSwitchButton.BorderSizePixel = 0
-SpeedSwitchButton.Text = ""
-SpeedSwitchButton.AutoButtonColor = false
-SpeedSwitchButton.Parent = SpeedToggleCard
-local SpeedSwitchCorner = Instance.new("UICorner") SpeedSwitchCorner.CornerRadius = UDim.new(1, 0) SpeedSwitchCorner.Parent = SpeedSwitchButton
-local SpeedSwitchStroke = Instance.new("UIStroke") SpeedSwitchStroke.Color = Color3.fromRGB(80, 80, 80) SpeedSwitchStroke.Thickness = 1.5 SpeedSwitchStroke.Parent = SpeedSwitchButton
-
-local SpeedSwitchCore = Instance.new("Frame")
-SpeedSwitchCore.Size = UDim2.new(0, 0, 0, 0)
-SpeedSwitchCore.AnchorPoint = Vector2.new(0.5, 0.5)
-SpeedSwitchCore.Position = UDim2.new(0.5, 0, 0.5, 0)
-SpeedSwitchCore.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-SpeedSwitchCore.BorderSizePixel = 0
-SpeedSwitchCore.Parent = SpeedSwitchButton
-local SpeedCoreCorner = Instance.new("UICorner") SpeedCoreCorner.CornerRadius = UDim.new(1, 0) SpeedCoreCorner.Parent = SpeedSwitchCore
-local SpeedCoreStroke = Instance.new("UIStroke") SpeedCoreStroke.Color = Color3.fromRGB(200, 140, 255) SpeedCoreStroke.Thickness = 1 SpeedCoreStroke.Transparency = 1 SpeedCoreStroke.Parent = SpeedSwitchCore
+local PanicButton = Instance.new("TextButton")
+PanicButton.Size = UDim2.new(1, -28, 0, 32)
+PanicButton.Position = UDim2.new(0, 14, 0, 162)
+PanicButton.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
+PanicButton.BorderSizePixel = 0
+PanicButton.AutoButtonColor = false
+PanicButton.Text = "PANIC STOP (UNLOAD)"
+PanicButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+PanicButton.TextSize = 10
+PanicButton.Font = Enum.Font.GothamBold
+PanicButton.Parent = PanelShooting
+local PanicCorner = Instance.new("UICorner") PanicCorner.CornerRadius = UDim.new(0, 6) PanicCorner.Parent = PanicButton
+local PanicStroke = Instance.new("UIStroke") PanicStroke.Color = Color3.fromRGB(100, 30, 30) PanicStroke.Thickness = 1 PanicStroke.Parent = PanicButton
 
 -- OVERLAY PANEL CONTENT
 local OverlaySectionTitle = Instance.new("TextLabel")
@@ -759,7 +595,7 @@ LockSwitchCore.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 LockSwitchCore.BorderSizePixel = 0
 LockSwitchCore.Parent = LockSwitchButton
 local LockCoreCorner = Instance.new("UICorner") LockCoreCorner.CornerRadius = UDim.new(1, 0) LockCoreCorner.Parent = LockSwitchCore
-local LockCoreStroke = Instance.new("UIStroke") LockCoreStroke.Color = Color3.fromRGB(200, 140, 255) LockCoreStroke.Thickness = 1 LockCoreStroke.Transparency = 0 LockCoreStroke.Parent = LockSwitchCore
+local LockCoreStroke = Instance.new("UIStroke") LockCoreStroke.Color = Color3.fromRGB(200, 140, 255) LockCoreStroke.Thickness = 1 LockCoreStroke.Transparency = 0 LockCoreStroke.Parent = LockSwitchButton
 
 --- COLOR CUSTOMIZER PANEL ---
 local ThemeSecTitle = Instance.new("TextLabel")
@@ -836,24 +672,18 @@ end
 updateSelectedPartHighlight()
 
 local currentColorValues = {R = 140, G = 100, B = 190}
-local KeyFrames = {} 
+local KeyFrames = {}
 
 local function applyCurrentColor()
     local newColor = Color3.fromRGB(currentColorValues.R, currentColorValues.G, currentColorValues.B)
     ComponentColors[SelectedCustomPart] = newColor
     
-    if SelectedCustomPart == "Header" then
-        HeaderBar.BackgroundColor3 = newColor
-    elseif SelectedCustomPart == "Sidebar" then
-        Sidebar.BackgroundColor3 = newColor
-    elseif SelectedCustomPart == "MainBg" then
-        MainFrame.BackgroundColor3 = newColor
-    elseif SelectedCustomPart == "Text" then
-        TitleLabel.TextColor3 = newColor
+    if SelectedCustomPart == "Header" then HeaderBar.BackgroundColor3 = newColor
+    elseif SelectedCustomPart == "Sidebar" then Sidebar.BackgroundColor3 = newColor
+    elseif SelectedCustomPart == "MainBg" then MainFrame.BackgroundColor3 = newColor
+    elseif SelectedCustomPart == "Text" then TitleLabel.TextColor3 = newColor
     elseif SelectedCustomPart == "Keys" then
-        for _, kData in pairs(KeyFrames) do
-            kData.Frame.BackgroundColor3 = newColor
-        end
+        for _, kData in pairs(KeyFrames) do kData.Frame.BackgroundColor3 = newColor end
     end
 end
 
@@ -928,7 +758,6 @@ local function createInteractiveSlider(parent, labelText, initialValue, yPos, on
         fill.Size = UDim2.new(pct, 0, 1, 0)
         thumb.Position = UDim2.new(pct, 0, 0.5, 0)
         valLbl.Text = tostring(val)
-
         onValueChanged(val)
     end
 
@@ -938,19 +767,16 @@ local function createInteractiveSlider(parent, labelText, initialValue, yPos, on
             updateSlide(input.Position.X)
         end
     end)
-
     thumb.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             draggingSlider = true
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             updateSlide(input.Position.X)
         end
     end)
-
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             draggingSlider = false
@@ -961,53 +787,6 @@ end
 createInteractiveSlider(PanelTheme, "Red", 140, 92, function(v) currentColorValues.R = v applyCurrentColor() end)
 createInteractiveSlider(PanelTheme, "Green", 100, 128, function(v) currentColorValues.G = v applyCurrentColor() end)
 createInteractiveSlider(PanelTheme, "Blue", 190, 164, function(v) currentColorValues.B = v applyCurrentColor() end)
-
--- ESP PANEL CONTENT
-local ESPSecTitle = Instance.new("TextLabel")
-ESPSecTitle.Size = UDim2.new(0, 180, 0, 16)
-ESPSecTitle.Position = UDim2.new(0, 14, 0, 12)
-ESPSecTitle.BackgroundTransparency = 1
-ESPSecTitle.Text = "PLAYER ESP SETTINGS"
-ESPSecTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
-ESPSecTitle.TextSize = 10
-ESPSecTitle.Font = Enum.Font.GothamBold
-ESPSecTitle.TextXAlignment = Enum.TextXAlignment.Left
-ESPSecTitle.Parent = PanelESP
-
-local ESPCard = Instance.new("Frame")
-ESPCard.Size = UDim2.new(1, -28, 0, 38)
-ESPCard.Position = UDim2.new(0, 14, 0, 32)
-ESPCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-ESPCard.BorderSizePixel = 0
-ESPCard.Parent = PanelESP
-local ESPCardCorner = Instance.new("UICorner") ESPCardCorner.CornerRadius = UDim.new(0, 6) ESPCardCorner.Parent = ESPCard
-local ESPCardStroke = Instance.new("UIStroke") ESPCardStroke.Color = Color3.fromRGB(30, 30, 30) ESPCardStroke.Thickness = 1 ESPCardStroke.Parent = ESPCard
-
-local ESPCardLabel = Instance.new("TextLabel")
-ESPCardLabel.Size = UDim2.new(1, -60, 1, 0)
-ESPCardLabel.Position = UDim2.new(0, 12, 0, 0)
-ESPCardLabel.BackgroundTransparency = 1
-ESPCardLabel.Text = "Enable Box ESP"
-ESPCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-ESPCardLabel.TextSize = 11
-ESPCardLabel.Font = Enum.Font.GothamMedium
-ESPCardLabel.TextXAlignment = Enum.TextXAlignment.Left
-ESPCardLabel.Parent = ESPCard
-
--- Panic Button
-local PanicButton = Instance.new("TextButton")
-PanicButton.Size = UDim2.new(1, -28, 0, 32)
-PanicButton.Position = UDim2.new(0, 14, 0, 204)
-PanicButton.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
-PanicButton.BorderSizePixel = 0
-PanicButton.AutoButtonColor = false
-PanicButton.Text = "PANIC STOP (UNLOAD)"
-PanicButton.TextColor3 = Color3.fromRGB(255, 100, 100)
-PanicButton.TextSize = 10
-PanicButton.Font = Enum.Font.GothamBold
-PanicButton.Parent = PanelShooting
-local PanicCorner = Instance.new("UICorner") PanicCorner.CornerRadius = UDim.new(0, 6) PanicCorner.Parent = PanicButton
-local PanicStroke = Instance.new("UIStroke") PanicStroke.Color = Color3.fromRGB(100, 30, 30) PanicStroke.Thickness = 1 PanicStroke.Parent = PanicButton
 
 --- KEY OVERLAY ---
 local OverlayContainer = Instance.new("Frame")
@@ -1099,7 +878,7 @@ local function setKeyState(keyName, isPressed)
     end
 end
 
--- MINIMIZED FLOATING MOON ICON (Updated with High-Detail Textured Moon Design)
+-- MINIMIZED FLOATING ICON
 local MinimizeIconButton = Instance.new("TextButton")
 MinimizeIconButton.Name = "MinimizeIconButton"
 MinimizeIconButton.Size = UDim2.new(0, 42, 0, 42)
@@ -1135,7 +914,6 @@ MiniMoon.BackgroundColor3 = Color3.fromRGB(220, 228, 240)
 MiniMoon.BorderSizePixel = 0
 MiniMoon.ClipsDescendants = true
 MiniMoon.Parent = MinimizeIconButton
-
 local MMCorner = Instance.new("UICorner") MMCorner.CornerRadius = UDim.new(1, 0) MMCorner.Parent = MiniMoon
 local MMStroke = Instance.new("UIStroke") MMStroke.Color = Color3.fromRGB(180, 205, 245) MMStroke.Thickness = 1.2 MMStroke.Parent = MiniMoon
 
@@ -1160,78 +938,35 @@ addMiniCrater(9, 2, 3, 3, Color3.fromRGB(240, 248, 255), 0.2)
 
 task.spawn(function()
     while true do
-        TweenService:Create(MMStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Transparency = 0.5,
-            Thickness = 2.5
-        }):Play()
-        TweenService:Create(MiniGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Size = UDim2.new(0, 36, 0, 36),
-            BackgroundTransparency = 0.92
-        }):Play()
+        TweenService:Create(MMStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.5, Thickness = 2.5}):Play()
+        TweenService:Create(MiniGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 36, 0, 36), BackgroundTransparency = 0.92}):Play()
         task.wait(1.4)
-        TweenService:Create(MMStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Transparency = 0.2,
-            Thickness = 1.0
-        }):Play()
-        TweenService:Create(MiniGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-            Size = UDim2.new(0, 28, 0, 28),
-            BackgroundTransparency = 0.78
-        }):Play()
+        TweenService:Create(MMStroke, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Transparency = 0.2, Thickness = 1.0}):Play()
+        TweenService:Create(MiniGlow, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, 28, 0, 28), BackgroundTransparency = 0.78}):Play()
         task.wait(1.4)
     end
 end)
 
 TimeTextBox.FocusLost:Connect(function()
     local val = tonumber(TimeTextBox.Text)
-    if val and val > 0 then TargetDelay = val else TimeTextBox.Text = tostring(TargetDelay) end
-end)
-
-PredTextBox.FocusLost:Connect(function()
-    local val = tonumber(PredTextBox.Text)
-    if val and val >= 0 then PredictionOffset = val else PredTextBox.Text = tostring(PredictionOffset) end
-end)
-
-StepbackTextBox.FocusLost:Connect(function()
-    local val = tonumber(StepbackTextBox.Text)
-    if val and val >= 0 then StepbackOffset = val else StepbackTextBox.Text = tostring(StepbackOffset) end
-end)
-
-SpeedTextBox.FocusLost:Connect(function()
-    local val = tonumber(SpeedTextBox.Text)
-    if val and val > 0 then WalkSpeedValue = val else SpeedTextBox.Text = tostring(WalkSpeedValue) end
-end)
-
-local function startSpeedHack()
-    if SpeedConnection then SpeedConnection:Disconnect() end
-    SpeedConnection = RunService.RenderStepped:Connect(function()
-        if not SpeedEnabled then return end
-        local character = Player.Character
-        if character then
-            local humanoid = character:FindFirstChildOfClass("Humanoid")
-            local rootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoid then
-                if humanoid.WalkSpeed ~= WalkSpeedValue then
-                    humanoid.WalkSpeed = WalkSpeedValue
-                end
-            end
-            if rootPart then
-                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 0.05, 0)
-            end
-        end
-    end)
-end
-
-local function stopSpeedHack()
-    if SpeedConnection then SpeedConnection:Disconnect(); SpeedConnection = nil end
-    local character = Player.Character
-    if character then
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.WalkSpeed = 16 end
+    if val and val > 0 then 
+        TargetDelay = math.clamp(val, AutoTimeMinLimit, AutoTimeMaxLimit)
+        TimeTextBox.Text = tostring(TargetDelay)
+    else 
+        TimeTextBox.Text = tostring(TargetDelay) 
     end
-end
+end)
 
-local function isDoingStepback()
-    return KeysPressed["S"] == true
+local function recordShotTiming(duration)
+    if not AutoTimeEnabled then return end
+    table.insert(ShotHistory, duration)
+    if #ShotHistory > 5 then table.remove(ShotHistory, 1) end
+    local sum = 0
+    for _, t in ipairs(ShotHistory) do sum = sum + t end
+    local avg = sum / #ShotHistory
+    
+    TargetDelay = math.clamp(tonumber(string.format("%.3f", avg)) or TargetDelay, AutoTimeMinLimit, AutoTimeMaxLimit)
+    TimeTextBox.Text = tostring(TargetDelay)
 end
 
 local function startScanning()
@@ -1240,14 +975,9 @@ local function startScanning()
         if not Running then return end
         if IsShooting then
             local elapsedTime = tick() - ShotStartTime
-            local activeStepbackExtra = isDoingStepback() and StepbackOffset or 0
-            local adjustedTarget = TargetDelay + activeStepbackExtra - PredictionOffset
-            local hardStopLimit = TargetDelay + activeStepbackExtra + 0.02
             
-            if elapsedTime >= adjustedTarget or elapsedTime >= hardStopLimit then
-                pcall(function()
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                end)
+            if elapsedTime >= TargetDelay then
+                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
                 IsShooting = false
                 task.wait(0.3)
             end
@@ -1259,6 +989,7 @@ local function stopScanning()
     if ScanConnection then ScanConnection:Disconnect(); ScanConnection = nil end
 end
 
+-- Key Bindings
 UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Tab then setKeyState("Tab", true)
     elseif input.KeyCode == Enum.KeyCode.Q then setKeyState("Q", true)
@@ -1282,36 +1013,34 @@ UserInputService.InputEnded:Connect(function(input)
     elseif input.KeyCode == Enum.KeyCode.A then setKeyState("A", false)
     elseif input.KeyCode == Enum.KeyCode.S then setKeyState("S", false)
     elseif input.KeyCode == Enum.KeyCode.D then setKeyState("D", false)
-    elseif input.KeyCode ==Enum.KeyCode.E then 
+    elseif input.KeyCode == Enum.KeyCode.E then 
         setKeyState("E", false)
         if IsShooting then
-            IsShooting = false
-            pcall(function()
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-            end)
+            local elapsedTime = tick() - ShotStartTime
+            
+            if elapsedTime < TargetDelay then
+                pcall(function() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) end)
+            else
+                local shotDuration = elapsedTime
+                recordShotTiming(shotDuration)
+                IsShooting = false
+                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
+            end
         end
     end
+end)
+
+AutoTimeSwitchButton.MouseButton1Click:Connect(function()
+    AutoTimeEnabled = not AutoTimeEnabled
+    ShotHistory = {}
+    applyBlackHoleToggleState(AutoTimeSwitchButton, ATSStroke, ATSCore, ATSCore.UIStroke, AutoTimeEnabled)
 end)
 
 SwitchButton.MouseButton1Click:Connect(function()
     Running = not Running
     IsShooting = false
     applyBlackHoleToggleState(SwitchButton, SwitchStroke, SwitchCore, SwitchCore.UIStroke, Running)
-    if Running then
-        startScanning()
-    else
-        stopScanning()
-    end
-end)
-
-SpeedSwitchButton.MouseButton1Click:Connect(function()
-    SpeedEnabled = not SpeedEnabled
-    applyBlackHoleToggleState(SpeedSwitchButton, SpeedSwitchStroke, SpeedSwitchCore, SpeedSwitchCore.UIStroke, SpeedEnabled)
-    if SpeedEnabled then
-        startSpeedHack()
-    else
-        stopSpeedHack()
-    end
+    if Running then startScanning() else stopScanning() end
 end)
 
 OverlaySwitchButton.MouseButton1Click:Connect(function()
@@ -1339,16 +1068,14 @@ end)
 
 PanicButton.MouseButton1Click:Connect(function()
     Running = false
-    SpeedEnabled = false
+    AutoTimeEnabled = false
     stopScanning()
-    stopSpeedHack()
     ScreenGui:Destroy()
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
     Running = false
-    SpeedEnabled = false
+    AutoTimeEnabled = false
     stopScanning()
-    stopSpeedHack()
     ScreenGui:Destroy()
 end)
