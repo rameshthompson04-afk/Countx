@@ -26,9 +26,9 @@ local TpWalkSpeed = 16
 
 -- Detailed Component Color States
 local ComponentColors = {
-    Header = Color3.fromRGB(5, 5, 5),
-    Sidebar = Color3.fromRGB(3, 3, 3),
-    MainBg = Color3.fromRGB(0, 0, 0),
+    Header = Color3.fromRGB(15, 15, 18),
+    Sidebar = Color3.fromRGB(10, 10, 12),
+    MainBg = Color3.fromRGB(12, 12, 15), -- Fixed from pure black to avoid rendering bugs
     Keys = Color3.fromRGB(15, 15, 18),
     Text = Color3.fromRGB(255, 255, 255),
     Accent = Color3.fromRGB(140, 100, 190)
@@ -50,7 +50,7 @@ MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 520, 0, 350)
 MainFrame.Position = UDim2.new(0.5, -260, 0.5, -175)
 MainFrame.BackgroundColor3 = ComponentColors.MainBg
-MainFrame.BackgroundTransparency = 0.02
+MainFrame.BackgroundTransparency = 0.05
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -65,21 +65,6 @@ local UIStroke = Instance.new("UIStroke")
 UIStroke.Color = Color3.fromRGB(40, 40, 40)
 UIStroke.Thickness = 1
 UIStroke.Parent = MainFrame
-
--- Subtle Drop Shadow
-local Shadow = Instance.new("ImageLabel")
-Shadow.Name = "Shadow"
-Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-Shadow.Position = UDim2.new(0.5, 0, 0.5, 6)
-Shadow.Size = UDim2.new(1, 32, 1, 32)
-Shadow.BackgroundTransparency = 1
-Shadow.Image = "rbxassetid://1316045217"
-Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-Shadow.ImageTransparency = 0.6
-Shadow.ScaleType = Enum.ScaleType.Slice
-Shadow.SliceCenter = Rect.new(10, 10, 118, 118)
-Shadow.ZIndex = -1
-Shadow.Parent = MainFrame
 
 -- Top Navigation / Header Bar (Height: 52px)
 local HeaderBar = Instance.new("Frame")
