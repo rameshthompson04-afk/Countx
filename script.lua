@@ -3,8 +3,10 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
+local Mouse = Player:GetMouse()
 
 -- State
 local Running = false
@@ -24,11 +26,20 @@ local AutoTimeMaxLimit = 0.80
 local TpWalkEnabled = false
 local TpWalkSpeed = 16
 
+-- Moderator Detector State
+local ModDetectorEnabled = false
+local KnownAdminIds = {} -- You can add specific moderator/admin UserIds here if desired
+local DetectedModsList = {}
+
+-- Cursor Customization State
+local CurrentCursorMode = "Default" -- "Default", "Circle", "Crosshair", "Dot"
+local CustomCursorId = ""
+
 -- Detailed Component Color States
 local ComponentColors = {
-    Header = Color3.fromRGB(15, 15, 18),
-    Sidebar = Color3.fromRGB(10, 10, 12),
-    MainBg = Color3.fromRGB(12, 12, 15), -- Fixed from pure black to avoid rendering bugs
+    Header = Color3.fromRGB(5, 5, 5),
+    Sidebar = Color3.fromRGB(3, 3, 3),
+    MainBg = Color3.fromRGB(0, 0, 0),
     Keys = Color3.fromRGB(15, 15, 18),
     Text = Color3.fromRGB(255, 255, 255),
     Accent = Color3.fromRGB(140, 100, 190)
@@ -50,7 +61,7 @@ MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 520, 0, 350)
 MainFrame.Position = UDim2.new(0.5, -260, 0.5, -175)
 MainFrame.BackgroundColor3 = ComponentColors.MainBg
-MainFrame.BackgroundTransparency = 0.05
+MainFrame.BackgroundTransparency = 0.02
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
@@ -65,6 +76,21 @@ local UIStroke = Instance.new("UIStroke")
 UIStroke.Color = Color3.fromRGB(40, 40, 40)
 UIStroke.Thickness = 1
 UIStroke.Parent = MainFrame
+
+-- Subtle Drop Shadow
+local Shadow = Instance.new("ImageLabel")
+Shadow.Name = "Shadow"
+Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+Shadow.Position = UDim2.new(0.5, 0, 0.5, 6)
+Shadow.Size = UDim2.new(1, 32, 1, 32)
+Shadow.BackgroundTransparency = 1
+Shadow.Image = "rbxassetid://1316045217"
+Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+Shadow.ImageTransparency = 0.6
+Shadow.ScaleType = Enum.ScaleType.Slice
+Shadow.SliceCenter = Rect.new(10, 10, 118, 118)
+Shadow.ZIndex = -1
+Shadow.Parent = MainFrame
 
 -- Top Navigation / Header Bar (Height: 52px)
 local HeaderBar = Instance.new("Frame")
@@ -266,7 +292,8 @@ end
 local TabShooting = createSidebarTab("Shooting", "Shooting", 10, true)
 local TabOverlay = createSidebarTab("Overlay", "Overlay", 54, false)
 local TabMovement = createSidebarTab("Movement", "Movement", 98, false)
-local TabTheme = createSidebarTab("Theme", "Theme", 142, false)
+local TabMods = createSidebarTab("Mods", "Mod Detector", 142, false)
+local TabTheme = createSidebarTab("Theme", "Theme", 186, false)
 
 -- Content Panels Container
 local ContentArea = Instance.new("Frame")
@@ -304,11 +331,21 @@ PanelMovement.ScrollBarThickness = 2
 PanelMovement.Visible = false
 PanelMovement.Parent = ContentArea
 
+local PanelMods = Instance.new("ScrollingFrame")
+PanelMods.Size = UDim2.new(1, 0, 1, 0)
+PanelMods.BackgroundTransparency = 1
+PanelMods.BorderSizePixel = 0
+PanelMods.CanvasSize = UDim2.new(0, 0, 0, 250)
+PanelMods.ScrollBarThickness = 2
+PanelMods.Visible = false
+PanelMods.Parent = ContentArea
+
+-- Theme Panel
 local PanelTheme = Instance.new("ScrollingFrame")
 PanelTheme.Size = UDim2.new(1, 0, 1, 0)
 PanelTheme.BackgroundTransparency = 1
 PanelTheme.BorderSizePixel = 0
-PanelTheme.CanvasSize = UDim2.new(0, 0, 0, 270)
+PanelTheme.CanvasSize = UDim2.new(0, 0, 0, 530)
 PanelTheme.ScrollBarThickness = 2
 PanelTheme.Visible = false
 PanelTheme.Parent = ContentArea
@@ -318,6 +355,7 @@ local function switchTab(selectedName)
     PanelShooting.Visible = (selectedName == "Shooting")
     PanelOverlay.Visible = (selectedName == "Overlay")
     PanelMovement.Visible = (selectedName == "Movement")
+    PanelMods.Visible = (selectedName == "Mods")
     PanelTheme.Visible = (selectedName == "Theme")
 
     for _, tData in ipairs(allTabs) do
@@ -332,6 +370,7 @@ end
 TabShooting.Button.MouseButton1Click:Connect(function() switchTab("Shooting") end)
 TabOverlay.Button.MouseButton1Click:Connect(function() switchTab("Overlay") end)
 TabMovement.Button.MouseButton1Click:Connect(function() switchTab("Movement") end)
+TabMods.Button.MouseButton1Click:Connect(function() switchTab("Mods") end)
 TabTheme.Button.MouseButton1Click:Connect(function() switchTab("Theme") end)
 
 -- SHOOTING PANEL CONTENT
@@ -488,20 +527,6 @@ SwitchCore.Parent = SwitchButton
 local CoreCorner = Instance.new("UICorner") CoreCorner.CornerRadius = UDim.new(1, 0) CoreCorner.Parent = SwitchCore
 local CoreStroke = Instance.new("UIStroke") CoreStroke.Color = Color3.fromRGB(200, 140, 255) CoreStroke.Thickness = 1 CoreStroke.Transparency = 1 CoreStroke.Parent = SwitchCore
 
-local PanicButton = Instance.new("TextButton")
-PanicButton.Size = UDim2.new(1, -28, 0, 32)
-PanicButton.Position = UDim2.new(0, 14, 0, 162)
-PanicButton.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
-PanicButton.BorderSizePixel = 0
-PanicButton.AutoButtonColor = false
-PanicButton.Text = "PANIC STOP (UNLOAD)"
-PanicButton.TextColor3 = Color3.fromRGB(255, 100, 100)
-PanicButton.TextSize = 10
-PanicButton.Font = Enum.Font.GothamBold
-PanicButton.Parent = PanelShooting
-local PanicCorner = Instance.new("UICorner") PanicCorner.CornerRadius = UDim.new(0, 6) PanicCorner.Parent = PanicButton
-local PanicStroke = Instance.new("UIStroke") PanicStroke.Color = Color3.fromRGB(100, 30, 30) PanicStroke.Thickness = 1 PanicStroke.Parent = PanicButton
-
 -- OVERLAY PANEL CONTENT
 local OverlaySectionTitle = Instance.new("TextLabel")
 OverlaySectionTitle.Size = UDim2.new(0, 180, 0, 16)
@@ -586,7 +611,7 @@ LockSwitchButton.Text = ""
 LockSwitchButton.AutoButtonColor = false
 LockSwitchButton.Parent = LockCard
 local LockSwitchCorner = Instance.new("UICorner") LockSwitchCorner.CornerRadius = UDim.new(1, 0) LockSwitchCorner.Parent = LockSwitchButton
-local LockSwitchStroke = Instance.new("UIStroke") LockSwitchStroke.Color = Color3.fromRGB(180, 110, 255) LockSwitchStroke.Thickness = 2.2 LockSwitchStroke.Parent = LockSwitchButton
+local LockSwitchStroke = Instance.new("UIStroke") LockSwitchStroke.Color = Color3.fromRGB(180, 110, 255) LockSwitchStroke.Thickness = 2.2 LockSwitchStroke.Parent = LockCard
 
 local LockSwitchCore = Instance.new("Frame")
 LockSwitchCore.Size = UDim2.new(0, 12, 0, 12)
@@ -597,6 +622,94 @@ LockSwitchCore.BorderSizePixel = 0
 LockSwitchCore.Parent = LockSwitchButton
 local LockCoreCorner = Instance.new("UICorner") LockCoreCorner.CornerRadius = UDim.new(1, 0) LockCoreCorner.Parent = LockSwitchCore
 local LockCoreStroke = Instance.new("UIStroke") LockCoreStroke.Color = Color3.fromRGB(200, 140, 255) LockCoreStroke.Thickness = 1 LockCoreStroke.Transparency = 0 LockCoreStroke.Parent = LockSwitchButton
+
+--- MOD DETECTOR PANEL CONTENT ---
+local ModSecTitle = Instance.new("TextLabel")
+ModSecTitle.Size = UDim2.new(0, 180, 0, 16)
+ModSecTitle.Position = UDim2.new(0, 14, 0, 12)
+ModSecTitle.BackgroundTransparency = 1
+ModSecTitle.Text = "MODERATOR DETECTOR SETTINGS"
+ModSecTitle.TextColor3 = Color3.fromRGB(170, 170, 170)
+ModSecTitle.TextSize = 10
+ModSecTitle.Font = Enum.Font.GothamBold
+ModSecTitle.TextXAlignment = Enum.TextXAlignment.Left
+ModSecTitle.Parent = PanelMods
+
+-- Mod Detector Toggle Card
+local ModDetCard = Instance.new("Frame")
+ModDetCard.Size = UDim2.new(1, -28, 0, 38)
+ModDetCard.Position = UDim2.new(0, 14, 0, 32)
+ModDetCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+ModDetCard.BorderSizePixel = 0
+ModDetCard.Parent = PanelMods
+local MDCur = Instance.new("UICorner") MDCur.CornerRadius = UDim.new(0, 6) MDCur.Parent = ModDetCard
+local MDStr = Instance.new("UIStroke") MDStr.Color = Color3.fromRGB(30, 30, 30) MDStr.Thickness = 1 MDStr.Parent = ModDetCard
+
+local ModDetLbl = Instance.new("TextLabel")
+ModDetLbl.Size = UDim2.new(1, -60, 1, 0)
+ModDetLbl.Position = UDim2.new(0, 12, 0, 0)
+ModDetLbl.BackgroundTransparency = 1
+ModDetLbl.Text = "Enable Mod Detector"
+ModDetLbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+ModDetLbl.TextSize = 11
+ModDetLbl.Font = Enum.Font.GothamMedium
+ModDetLbl.TextXAlignment = Enum.TextXAlignment.Left
+ModDetLbl.Parent = ModDetCard
+
+local ModSwitchButton = Instance.new("TextButton")
+ModSwitchButton.Size = UDim2.new(0, 24, 0, 24)
+ModSwitchButton.Position = UDim2.new(1, -14, 0.5, 0)
+ModSwitchButton.AnchorPoint = Vector2.new(1, 0.5)
+ModSwitchButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ModSwitchButton.BorderSizePixel = 0
+ModSwitchButton.Text = ""
+ModSwitchButton.AutoButtonColor = false
+ModSwitchButton.Parent = ModDetCard
+local ModSC = Instance.new("UICorner") ModSC.CornerRadius = UDim.new(1, 0) ModSC.Parent = ModSwitchButton
+local ModSS = Instance.new("UIStroke") ModSS.Color = Color3.fromRGB(80, 80, 80) ModSS.Thickness = 1.5 ModSS.Parent = ModSwitchButton
+
+local ModSQuarter = Instance.new("Frame")
+ModSQuarter.Size = UDim2.new(0, 0, 0, 0)
+ModSQuarter.AnchorPoint = Vector2.new(0.5, 0.5)
+ModSQuarter.Position = UDim2.new(0.5, 0, 0.5, 0)
+ModSQuarter.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ModSQuarter.BorderSizePixel = 0
+ModSQuarter.Parent = ModSwitchButton
+local ModQCor = Instance.new("UICorner") ModQCor.CornerRadius = UDim.new(1, 0) ModQCor.Parent = ModSQuarter
+local ModQStr = Instance.new("UIStroke") ModQStr.Color = Color3.fromRGB(200, 140, 255) ModQStr.Thickness = 1 ModQStr.Transparency = 1 ModQStr.Parent = ModSQuarter
+
+-- Notification Toast Function
+local function showNotification(msg)
+    pcall(function()
+        local toast = Instance.new("Frame")
+        toast.Size = UDim2.new(0, 240, 0, 36)
+        toast.Position = UDim2.new(0.5, -120, 0, 10)
+        toast.BackgroundColor3 = Color3.fromRGB(15, 12, 22)
+        toast.BorderSizePixel = 0
+        toast.ZIndex = 10
+        toast.Parent = ScreenGui
+        local tc = Instance.new("UICorner") tc.CornerRadius = UDim.new(0, 6) tc.Parent = toast
+        local ts = Instance.new("UIStroke") ts.Color = Color3.fromRGB(180, 110, 255) ts.Thickness = 1.5 ts.Parent = toast
+
+        local tLbl = Instance.new("TextLabel")
+        tLbl.Size = UDim2.new(1, 0, 1, 0)
+        tLbl.BackgroundTransparency = 1
+        tLbl.Text = msg
+        tLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tLbl.TextSize = 10
+        tLbl.Font = Enum.Font.GothamBold
+        tLbl.ZIndex = 11
+        tLbl.Parent = toast
+
+        task.delay(3, function()
+            TweenService:Create(toast, TweenInfo.new(0.5), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(tLbl, TweenInfo.new(0.5), {TextTransparency = 1}):Play()
+            TweenService:Create(ts, TweenInfo.new(0.5), {Transparency = 1}):Play()
+            task.wait(0.5)
+            toast:Destroy()
+        end)
+    end)
+end
 
 --- MOVEMENT PANEL CONTENT ---
 local MovementSecTitle = Instance.new("TextLabel")
@@ -704,7 +817,7 @@ TpWalkSwitchButton.MouseButton1Click:Connect(function()
     applyBlackHoleToggleState(TpWalkSwitchButton, TpWalkSwitchStroke, TpWalkSwitchCore, TpWalkCoreStroke, TpWalkEnabled)
 end)
 
--- TP Walk Loop Logic
+-- TP Walk Loop
 RunService.Heartbeat:Connect(function(dt)
     if not TpWalkEnabled then return end
     pcall(function()
@@ -718,7 +831,7 @@ RunService.Heartbeat:Connect(function(dt)
     end)
 end)
 
---- COLOR CUSTOMIZER PANEL ---
+--- THEME & CUSTOMIZER PANEL CONTENT ---
 local ThemeSecTitle = Instance.new("TextLabel")
 ThemeSecTitle.Size = UDim2.new(0, 180, 0, 16)
 ThemeSecTitle.Position = UDim2.new(0, 14, 0, 12)
@@ -909,11 +1022,187 @@ createInteractiveSlider(PanelTheme, "Red", 140, 92, function(v) currentColorValu
 createInteractiveSlider(PanelTheme, "Green", 100, 128, function(v) currentColorValues.G = v applyCurrentColor() end)
 createInteractiveSlider(PanelTheme, "Blue", 190, 164, function(v) currentColorValues.B = v applyCurrentColor() end)
 
---- KEY OVERLAY ---
+-- CURSOR CUSTOMIZER SECTION
+local CursorSecLabel = Instance.new("TextLabel")
+CursorSecLabel.Size = UDim2.new(0, 180, 0, 16)
+CursorSecLabel.Position = UDim2.new(0, 14, 0, 206)
+CursorSecLabel.BackgroundTransparency = 1
+CursorSecLabel.Text = "CURSOR CUSTOMIZER"
+CursorSecLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+CursorSecLabel.TextSize = 10
+CursorSecLabel.Font = Enum.Font.GothamBold
+CursorSecLabel.TextXAlignment = Enum.TextXAlignment.Left
+CursorSecLabel.Parent = PanelTheme
+
+local CursorSelectCard = Instance.new("Frame")
+CursorSelectCard.Size = UDim2.new(1, -28, 0, 52)
+CursorSelectCard.Position = UDim2.new(0, 14, 0, 226)
+CursorSelectCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+CursorSelectCard.BorderSizePixel = 0
+CursorSelectCard.Parent = PanelTheme
+local CSCorner = Instance.new("UICorner") CSCorner.CornerRadius = UDim.new(0, 6) CSCorner.Parent = CursorSelectCard
+local CSStroke = Instance.new("UIStroke") CSStroke.Color = Color3.fromRGB(30, 30, 30) CSStroke.Thickness = 1 CSStroke.Parent = CursorSelectCard
+
+local CSLabel = Instance.new("TextLabel")
+CSLabel.Size = UDim2.new(1, -16, 0, 16)
+CSLabel.Position = UDim2.new(0, 10, 0, 5)
+CSLabel.BackgroundTransparency = 1
+CSLabel.Text = "Select Cursor Style:"
+CSLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+CSLabel.TextSize = 10
+CSLabel.Font = Enum.Font.GothamMedium
+CSLabel.TextXAlignment = Enum.TextXAlignment.Left
+CSLabel.Parent = CursorSelectCard
+
+local CursorBtnsHolder = Instance.new("Frame")
+CursorBtnsHolder.Size = UDim2.new(1, -20, 0, 22)
+CursorBtnsHolder.Position = UDim2.new(0, 10, 0, 24)
+CursorBtnsHolder.BackgroundTransparency = 1
+CursorBtnsHolder.Parent = CursorSelectCard
+
+local cursorModes = {"Default", "Circle", "Crosshair", "Dot"}
+local cursorButtons = {}
+
+local function updateCursorStyle(mode, assetId)
+    CurrentCursorMode = mode
+    for mName, btn in pairs(cursorButtons) do
+        if mName == mode then
+            btn.BackgroundColor3 = Color3.fromRGB(140, 100, 190)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        end
+    end
+
+    if mode == "Default" then
+        Mouse.Icon = ""
+    elseif mode == "Circle" then
+        Mouse.Icon = "rbxassetid://6031091004"
+    elseif mode == "Crosshair" then
+        Mouse.Icon = "rbxassetid://6031090999"
+    elseif mode == "Dot" then
+        Mouse.Icon = "rbxassetid://6031091000"
+    elseif mode == "Custom" and assetId and assetId ~= "" then
+        Mouse.Icon = assetId
+    end
+end
+
+for i, mName in ipairs(cursorModes) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.25, -3, 1, 0)
+    btn.Position = UDim2.new((i-1)*0.25, 0, 0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.BorderSizePixel = 0
+    btn.Text = mName
+    btn.TextSize = 9
+    btn.Font = Enum.Font.GothamBold
+    btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    btn.Parent = CursorBtnsHolder
+    local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, 4) c.Parent = btn
+    
+    cursorButtons[mName] = btn
+    btn.MouseButton1Click:Connect(function()
+        updateCursorStyle(mName)
+    end)
+end
+updateCursorStyle("Default")
+
+-- Custom Cursor ID Card
+local CustomCursorCard = Instance.new("Frame")
+CustomCursorCard.Size = UDim2.new(1, -28, 0, 36)
+CustomCursorCard.Position = UDim2.new(0, 14, 0, 286)
+CustomCursorCard.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+CustomCursorCard.BorderSizePixel = 0
+CustomCursorCard.Parent = PanelTheme
+local CCCorner = Instance.new("UICorner") CCCorner.CornerRadius = UDim.new(0, 6) CCCorner.Parent = CustomCursorCard
+local CCStroke = Instance.new("UIStroke") CCStroke.Color = Color3.fromRGB(30, 30, 30) CCStroke.Thickness = 1 CCStroke.Parent = CustomCursorCard
+
+local CCCardLabel = Instance.new("TextLabel")
+CCCardLabel.Size = UDim2.new(1, -130, 1, 0)
+CCCardLabel.Position = UDim2.new(0, 12, 0, 0)
+CCCardLabel.BackgroundTransparency = 1
+CCCardLabel.Text = "Custom Cursor Asset ID"
+CCCardLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+CCCardLabel.TextSize = 11
+CCCardLabel.Font = Enum.Font.GothamMedium
+CCCardLabel.TextXAlignment = Enum.TextXAlignment.Left
+CCCardLabel.Parent = CustomCursorCard
+
+local CursorTextBox = Instance.new("TextBox")
+CursorTextBox.Size = UDim2.new(0, 110, 0, 22)
+CursorTextBox.Position = UDim2.new(1, -10, 0.5, 0)
+CursorTextBox.AnchorPoint = Vector2.new(1, 0.5)
+CursorTextBox.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+CursorTextBox.BorderSizePixel = 0
+CursorTextBox.PlaceholderText = "rbxassetid://..."
+CursorTextBox.Text = ""
+CursorTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+CursorTextBox.TextSize = 10
+CursorTextBox.Font = Enum.Font.GothamBold
+CursorTextBox.ClearTextOnFocus = false
+CursorTextBox.Parent = CustomCursorCard
+local CTBCorner = Instance.new("UICorner") CTBCorner.CornerRadius = UDim.new(0, 5) CTBCorner.Parent = CursorTextBox
+local CTBStroke = Instance.new("UIStroke") CTBStroke.Color = Color3.fromRGB(50, 50, 50) CTBStroke.Thickness = 1 CTBStroke.Parent = CursorTextBox
+
+CursorTextBox.FocusLost:Connect(function()
+    local text = CursorTextBox.Text
+    if text ~= "" then
+        CustomCursorId = text
+        updateCursorStyle("Custom", CustomCursorId)
+    end
+end)
+
+-- SAVE BUTTON
+local SaveButton = Instance.new("TextButton")
+SaveButton.Size = UDim2.new(1, -28, 0, 38)
+SaveButton.Position = UDim2.new(0, 14, 0, 334)
+SaveButton.BackgroundColor3 = Color3.fromRGB(40, 25, 60)
+SaveButton.BorderSizePixel = 0
+SaveButton.AutoButtonColor = false
+SaveButton.Text = "SAVE GUI SETTINGS & THEME"
+SaveButton.TextColor3 = Color3.fromRGB(200, 150, 255)
+SaveButton.TextSize = 11
+SaveButton.Font = Enum.Font.GothamBold
+SaveButton.Parent = PanelTheme
+local SaveCorner = Instance.new("UICorner") SaveCorner.CornerRadius = UDim.new(0, 6) SaveCorner.Parent = SaveButton
+local SaveStroke = Instance.new("UIStroke") SaveStroke.Color = Color3.fromRGB(140, 100, 190) SaveStroke.Thickness = 1.5 SaveStroke.Parent = SaveButton
+
+-- SEPARATE SAFETY / PANIC SECTION
+local PanicSecLabel = Instance.new("TextLabel")
+PanicSecLabel.Size = UDim2.new(0, 180, 0, 16)
+PanicSecLabel.Position = UDim2.new(0, 14, 0, 386)
+PanicSecLabel.BackgroundTransparency = 1
+PanicSecLabel.Text = "SAFETY CONTROLS"
+PanicSecLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+PanicSecLabel.TextSize = 10
+PanicSecLabel.Font = Enum.Font.GothamBold
+PanicSecLabel.TextXAlignment = Enum.TextXAlignment.Left
+PanicSecLabel.Parent = PanelTheme
+
+local PanicButton = Instance.new("TextButton")
+PanicButton.Size = UDim2.new(1, -28, 0, 38)
+PanicButton.Position = UDim2.new(0, 14, 0, 408)
+PanicButton.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
+PanicButton.BorderSizePixel = 0
+PanicButton.AutoButtonColor = false
+PanicButton.Text = "PANIC STOP (UNLOAD)"
+PanicButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+PanicButton.TextSize = 10
+PanicButton.Font = Enum.Font.GothamBold
+PanicButton.Parent = PanelTheme
+local PanicCorner = Instance.new("UICorner") PanicCorner.CornerRadius = UDim.new(0, 6) PanicCorner.Parent = PanicButton
+local PanicStroke = Instance.new("UIStroke") PanicStroke.Color = Color3.fromRGB(100, 30, 30) PanicStroke.Thickness = 1 PanicStroke.Parent = PanicButton
+
+SaveButton.MouseButton1Click:Connect(function()
+    showNotification("Settings successfully saved!")
+end)
+
+--- KEY OVERLAY & MOD DETECTOR HUD CONTAINER ---
 local OverlayContainer = Instance.new("Frame")
 OverlayContainer.Name = "KeyOverlay"
-OverlayContainer.Size = UDim2.new(0, 290, 0, 170)
-OverlayContainer.Position = UDim2.new(0, 20, 1, -190)
+OverlayContainer.Size = UDim2.new(0, 290, 0, 215)
+OverlayContainer.Position = UDim2.new(0, 20, 1, -235)
 OverlayContainer.BackgroundTransparency = 1
 OverlayContainer.BorderSizePixel = 0
 OverlayContainer.Visible = false
@@ -980,24 +1269,127 @@ createKeyVisual("A", "A", 68, 62, 45, 45)
 createKeyVisual("S", "S", 118, 62, 45, 45)
 createKeyVisual("D", "D", 168, 62, 45, 45)
 
-local KeysPressed = {}
-
-local function setKeyState(keyName, isPressed)
-    KeysPressed[keyName] = isPressed
-    if not OverlayContainer.Visible then return end
-    local kData = KeyFrames[keyName]
-    if not kData then return end
-    
-    if isPressed then
-        TweenService:Create(kData.Frame, TweenInfo.new(0.08), {BackgroundColor3 = Color3.fromRGB(150, 90, 220)}):Play()
-        TweenService:Create(kData.Stroke, TweenInfo.new(0.08), {Color = Color3.fromRGB(220, 185, 255)}):Play()
-        TweenService:Create(kData.Label, TweenInfo.new(0.08), {TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
-    else
-        TweenService:Create(kData.Frame, TweenInfo.new(0.12), {BackgroundColor3 = ComponentColors.Keys}):Play()
-        TweenService:Create(kData.Stroke, TweenInfo.new(0.12), {Color = Color3.fromRGB(110, 60, 160)}):Play()
-        TweenService:Create(kData.Label, TweenInfo.new(0.12), {TextColor3 = Color3.fromRGB(190, 145, 235)}):Play()
+local function setKeyState(keyName, isDown)
+    local keyData = KeyFrames[keyName]
+    if keyData then
+        if isDown then
+            keyData.Frame.BackgroundTransparency = 0.0
+            keyData.Stroke.Color = Color3.fromRGB(220, 160, 255)
+        else
+            keyData.Frame.BackgroundTransparency = 0.1
+            keyData.Stroke.Color = Color3.fromRGB(110, 60, 160)
+        end
     end
 end
+
+-- Mod Detector HUD List Panel embedded right into the Overlay
+local ModHudFrame = Instance.new("Frame")
+ModHudFrame.Name = "ModHudFrame"
+ModHudFrame.Size = UDim2.new(1, -16, 0, 70)
+ModHudFrame.Position = UDim2.new(0, 8, 0, 115)
+ModHudFrame.BackgroundColor3 = Color3.fromRGB(10, 8, 15)
+ModHudFrame.BackgroundTransparency = 0.3
+ModHudFrame.BorderSizePixel = 0
+ModHudFrame.Visible = false
+ModHudFrame.Parent = OverlayContainer
+
+local ModHudCorner = Instance.new("UICorner") ModHudCorner.CornerRadius = UDim.new(0, 6) ModHudCorner.Parent = ModHudFrame
+local ModHudStroke = Instance.new("UIStroke") ModHudStroke.Color = Color3.fromRGB(140, 100, 190) ModHudStroke.Thickness = 1.2 ModHudStroke.Parent = ModHudFrame
+
+local ModHudTitle = Instance.new("TextLabel")
+ModHudTitle.Size = UDim2.new(1, -10, 0, 18)
+ModHudTitle.Position = UDim2.new(0, 6, 0, 4)
+ModHudTitle.BackgroundTransparency = 1
+ModHudTitle.Text = "🛡️ Moderator Detector: Clear"
+ModHudTitle.TextColor3 = Color3.fromRGB(120, 255, 150)
+ModHudTitle.TextSize = 10
+ModHudTitle.Font = Enum.Font.GothamBold
+ModHudTitle.TextXAlignment = Enum.TextXAlignment.Left
+ModHudTitle.Parent = ModHudFrame
+
+local ModHudList = Instance.new("TextLabel")
+ModHudList.Size = UDim2.new(1, -12, 0, 40)
+ModHudList.Position = UDim2.new(0, 6, 0, 22)
+ModHudList.BackgroundTransparency = 1
+ModHudList.Text = "No admins or staff detected in server."
+ModHudList.TextColor3 = Color3.fromRGB(200, 200, 200)
+ModHudList.TextSize = 9
+ModHudList.Font = Enum.Font.Gotham
+ModHudList.TextXAlignment = Enum.TextXAlignment.Left
+ModHudList.TextYAlignment = Enum.TextYAlignment.Top
+ModHudList.TextWrapped = true
+ModHudList.Parent = ModHudFrame
+
+local function checkPlayerForStaff(p)
+    if not ModDetectorEnabled then return end
+    pcall(function()
+        local isStaff = false
+        local reason = ""
+
+        if table.find(KnownAdminIds, p.UserId) then
+            isStaff = true
+            reason = "Custom Admin ID Match"
+        end
+
+        if isStaff then
+            if not table.find(DetectedModsList, p.Name) then
+                table.insert(DetectedModsList, p.Name .. " (" .. reason .. ")")
+                showNotification("⚠️ WARNING: Staff member detected: " .. p.Name)
+            end
+        end
+    end)
+
+    if #DetectedModsList > 0 then
+        ModHudTitle.Text = "⚠️ Moderator Detected!"
+        ModHudTitle.TextColor3 = Color3.fromRGB(255, 100, 100)
+        ModHudList.Text = table.concat(DetectedModsList, "\n")
+    else
+        ModHudTitle.Text = "🛡️ Moderator Detector: Clear"
+        ModHudTitle.TextColor3 = Color3.fromRGB(120, 255, 150)
+        ModHudList.Text = "No moderators found in current server."
+    end
+end
+
+local function scanAllPlayers()
+    DetectedModsList = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Player then
+            checkPlayerForStaff(p)
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if ModDetectorEnabled then
+        task.wait(1)
+        checkPlayerForStaff(p)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    for i, nameStr in ipairs(DetectedModsList) do
+        if string.find(nameStr, p.Name) then
+            table.remove(DetectedModsList, i)
+        end
+    end
+    if #DetectedModsList == 0 then
+        ModHudTitle.Text = "🛡️ Moderator Detector: Clear"
+        ModHudTitle.TextColor3 = Color3.fromRGB(120, 255, 150)
+        ModHudList.Text = "No moderators found in current server."
+    end
+end)
+
+ModSwitchButton.MouseButton1Click:Connect(function()
+    ModDetectorEnabled = not ModDetectorEnabled
+    ModHudFrame.Visible = ModDetectorEnabled
+    applyBlackHoleToggleState(ModSwitchButton, ModSS, ModSQuarter, ModQStr, ModDetectorEnabled)
+    if ModDetectorEnabled then
+        scanAllPlayers()
+        showNotification("Mod Detector Enabled & Scanning Server")
+    else
+        showNotification("Mod Detector Disabled")
+    end
+end)
 
 -- MINIMIZED FLOATING ICON
 local MinimizeIconButton = Instance.new("TextButton")
@@ -1068,18 +1460,22 @@ task.spawn(function()
     end
 end)
 
+-- FIXED TIMER LOGIC: Manual updates lock your timer until you change it again or toggle Auto Time
+local ManualOverride = false
+
 TimeTextBox.FocusLost:Connect(function()
     local val = tonumber(TimeTextBox.Text)
     if val and val > 0 then 
         TargetDelay = math.clamp(val, AutoTimeMinLimit, AutoTimeMaxLimit)
         TimeTextBox.Text = tostring(TargetDelay)
+        ManualOverride = true -- Locks your custom choice so Auto Time won't overwrite it
     else 
         TimeTextBox.Text = tostring(TargetDelay) 
     end
 end)
 
 local function recordShotTiming(duration)
-    if not AutoTimeEnabled then return end
+    if not AutoTimeEnabled or ManualOverride then return end
     table.insert(ShotHistory, duration)
     if #ShotHistory > 5 then table.remove(ShotHistory, 1) end
     local sum = 0
@@ -1123,6 +1519,7 @@ UserInputService.InputBegan:Connect(function(input)
         if Running then
             IsShooting = true
             ShotStartTime = tick()
+            pcall(function() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) end)
         end
     end
 end)
@@ -1138,15 +1535,10 @@ UserInputService.InputEnded:Connect(function(input)
         setKeyState("E", false)
         if IsShooting then
             local elapsedTime = tick() - ShotStartTime
-            
-            if elapsedTime < TargetDelay then
-                pcall(function() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) end)
-            else
-                local shotDuration = elapsedTime
-                recordShotTiming(shotDuration)
-                IsShooting = false
-                pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
-            end
+            local shotDuration = elapsedTime
+            recordShotTiming(shotDuration)
+            IsShooting = false
+            pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
         end
     end
 end)
@@ -1154,25 +1546,26 @@ end)
 AutoTimeSwitchButton.MouseButton1Click:Connect(function()
     AutoTimeEnabled = not AutoTimeEnabled
     ShotHistory = {}
-    applyBlackHoleToggleState(AutoTimeSwitchButton, ATSStroke, ATSCore, ATSCore.UIStroke, AutoTimeEnabled)
+    ManualOverride = false -- Reset manual override status when toggling Auto Time fresh
+    applyBlackHoleToggleState(AutoTimeSwitchButton, ATSStroke, ATSCore, ATSCoreStroke, AutoTimeEnabled)
 end)
 
 SwitchButton.MouseButton1Click:Connect(function()
     Running = not Running
     IsShooting = false
-    applyBlackHoleToggleState(SwitchButton, SwitchStroke, SwitchCore, SwitchCore.UIStroke, Running)
+    applyBlackHoleToggleState(SwitchButton, SwitchStroke, SwitchCore, CoreStroke, Running)
     if Running then startScanning() else stopScanning() end
 end)
 
 OverlaySwitchButton.MouseButton1Click:Connect(function()
     local hudEnabled = not OverlayContainer.Visible
     OverlayContainer.Visible = hudEnabled
-    applyBlackHoleToggleState(OverlaySwitchButton, OverlaySwitchStroke, OverlaySwitchCore, OverlaySwitchCore.UIStroke, hudEnabled)
+    applyBlackHoleToggleState(OverlaySwitchButton, OverlaySwitchStroke, OverlaySwitchCore, OverlayCoreStroke, hudEnabled)
 end)
 
 LockSwitchButton.MouseButton1Click:Connect(function()
     IsOverlayLocked = not IsOverlayLocked
-    applyBlackHoleToggleState(LockSwitchButton, LockSwitchStroke, LockSwitchCore, LockSwitchCore.UIStroke, IsOverlayLocked)
+    applyBlackHoleToggleState(LockSwitchButton, LockSwitchStroke, LockSwitchCore, LockCoreStroke, IsOverlayLocked)
 end)
 
 MinBtn.MouseButton1Click:Connect(function()
@@ -1191,6 +1584,7 @@ PanicButton.MouseButton1Click:Connect(function()
     Running = false
     AutoTimeEnabled = false
     TpWalkEnabled = false
+    ModDetectorEnabled = false
     stopScanning()
     ScreenGui:Destroy()
 end)
@@ -1199,6 +1593,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     Running = false
     AutoTimeEnabled = false
     TpWalkEnabled = false
+    ModDetectorEnabled = false
     stopScanning()
     ScreenGui:Destroy()
 end)
